@@ -123,7 +123,7 @@ var PCC_GATEWAY_ID_PATTERN = /^GW_\d{4}$/;
  * Cấu hình sheet đích theo PCC V0.2.
  *
  * - idHeader / idPattern: dùng cho validate ID và kiểm tra trùng
- * - canAutoGenerateId: false khi không thể tự sinh ID (vd. DOCUMENT có MF_ hoặc PC_)
+ * - canAutoGenerateId: false khi không thể tự sinh ID (vd. DOCUMENT: MF_xx_xx_NAME / PC_xx_NAME)
  * - mappingComplete + appendable: chỉ true khi đã xác nhận 100% header mapping
  * - appendFields: chỉ khai báo cột đích đã xác nhận; thiếu bất kỳ cột nào → không append
  */
@@ -149,8 +149,8 @@ var PCC_TARGET_SHEET_CONFIG = {
   },
   '02_DOCUMENT': {
     idHeader: 'Document ID',
-    idPattern: /^(MF_|PC_)\d{4}$/,
-    idFormatHint: 'MF_0001 hoặc PC_0001',
+    idPattern: /^(MF|PC)_[A-Z0-9_]+$/,
+    idFormatHint: 'MF_xx_xx_NAME hoặc PC_xx_NAME',
     canAutoGenerateId: false,
     appendable: false,
     mappingComplete: false,
