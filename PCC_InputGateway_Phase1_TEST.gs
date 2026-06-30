@@ -4,13 +4,14 @@
  * Input Gateway Script – Phase 1
  *
  * Quyết định tham chiếu: D_0011 → D_0016
+ * ID format tham chiếu: PCC V0.2
  * Chạy thủ công qua menu "PCC V0.3" > "Run Input Gateway Phase 1"
  *
  * Nguyên tắc:
  * - Header row = 3, data bắt đầu từ dòng 4
  * - Lookup cột theo tên header, không hard-code số cột
  * - Không ghi 00_DASHBOARD, không append/sửa 03_DECISION_LOG
- * - Chỉ append dòng mới vào sheet đích được phép
+ * - Chỉ append khi mapping header đích đã xác nhận 100%
  * - Thiếu sheet/header bắt buộc → dừng và ghi PCC_ERROR_LOG
  */
 
@@ -114,97 +115,86 @@ var PCC_TRANSFER_MODE = {
   AUTO: 'AUTO'
 };
 
+/** PCC V0.2 – Gateway ID: GW_0001 */
 var PCC_GATEWAY_ID_PREFIX = 'GW_';
 var PCC_GATEWAY_ID_PATTERN = /^GW_\d{4}$/;
 
 /**
- * Cấu hình sheet đích.
- * appendFields: danh sách cột đích bắt buộc phải tồn tại trong sheet (header row 3).
- * Nếu thiếu header đích → guard báo lỗi, không append.
- * Không tự đoán alias header – tên phải khớp sheet thực tế.
+ * Cấu hình sheet đích theo PCC V0.2.
+ *
+ * - idHeader / idPattern: dùng cho validate ID và kiểm tra trùng
+ * - canAutoGenerateId: false khi không thể tự sinh ID (vd. DOCUMENT có MF_ hoặc PC_)
+ * - mappingComplete + appendable: chỉ true khi đã xác nhận 100% header mapping
+ * - appendFields: chỉ khai báo cột đích đã xác nhận; thiếu bất kỳ cột nào → không append
  */
 var PCC_TARGET_SHEET_CONFIG = {
   '01_TASK': {
     idHeader: 'Task ID',
-    idPrefix: 'TASK_',
-    idPattern: /^TASK_\d{4}$/,
+    idPrefix: 'T_',
+    idPattern: /^T_\d{4}$/,
+    idFormatHint: 'T_0001',
+    canAutoGenerateId: true,
     appendable: true,
+    mappingComplete: true,
     appendFields: [
-      { targetHeader: 'Task ID', gatewayHeader: 'Target ID Proposed', required: true },
-      { targetHeader: 'Task Title', gatewayHeader: 'Raw Input', required: true },
-      { targetHeader: 'Priority', gatewayHeader: 'Priority', required: false },
-      { targetHeader: 'Owner', gatewayHeader: 'Owner', required: false },
-      { targetHeader: 'Due Date', gatewayHeader: 'Due Date', required: false },
-      { targetHeader: 'Related Document ID', gatewayHeader: 'Related Document ID', required: false },
-      { targetHeader: 'Related Task ID', gatewayHeader: 'Related Task ID', required: false },
-      { targetHeader: 'Related Decision ID', gatewayHeader: 'Related Decision ID', required: false },
-      { targetHeader: 'Source Gateway ID', gatewayHeader: 'Gateway ID', required: false }
+      { targetHeader: 'Task ID', gatewayHeader: 'Target ID Proposed' },
+      { targetHeader: 'Task Name', gatewayHeader: 'Raw Input' },
+      { targetHeader: 'Priority', gatewayHeader: 'Priority' },
+      { targetHeader: 'Owner', gatewayHeader: 'Owner' },
+      { targetHeader: 'Due Date', gatewayHeader: 'Due Date' },
+      { targetHeader: 'Related Document', gatewayHeader: 'Related Document ID' },
+      { targetHeader: 'Source', gatewayHeader: 'Gateway ID' },
+      { targetHeader: 'Remark', gatewayHeader: 'Remark' }
     ]
   },
   '02_DOCUMENT': {
     idHeader: 'Document ID',
-    idPrefix: 'DOC_',
-    idPattern: /^DOC_\d{4}$/,
-    appendable: true,
-    appendFields: [
-      { targetHeader: 'Document ID', gatewayHeader: 'Target ID Proposed', required: true },
-      { targetHeader: 'Document Title', gatewayHeader: 'Raw Input', required: true },
-      { targetHeader: 'Owner', gatewayHeader: 'Owner', required: false },
-      { targetHeader: 'Related Task ID', gatewayHeader: 'Related Task ID', required: false },
-      { targetHeader: 'Related Document ID', gatewayHeader: 'Related Document ID', required: false },
-      { targetHeader: 'Related Decision ID', gatewayHeader: 'Related Decision ID', required: false },
-      { targetHeader: 'Source Gateway ID', gatewayHeader: 'Gateway ID', required: false }
-    ]
+    idPattern: /^(MF_|PC_)\d{4}$/,
+    idFormatHint: 'MF_0001 hoặc PC_0001',
+    canAutoGenerateId: false,
+    appendable: false,
+    mappingComplete: false,
+    appendFields: []
   },
   '03_DECISION_LOG': {
     idHeader: 'Decision ID',
-    idPrefix: 'DEC_',
-    idPattern: /^DEC_\d{4}$/,
+    idPrefix: 'D_',
+    idPattern: /^D_\d{4}$/,
+    idFormatHint: 'D_0001',
+    canAutoGenerateId: true,
     appendable: false,
+    mappingComplete: false,
     appendFields: []
   },
   '04_NOTEBOOKLM': {
-    idHeader: 'NotebookLM ID',
-    idPrefix: 'NBLM_',
-    idPattern: /^NBLM_\d{4}$/,
-    appendable: true,
-    appendFields: [
-      { targetHeader: 'NotebookLM ID', gatewayHeader: 'Target ID Proposed', required: true },
-      { targetHeader: 'Title', gatewayHeader: 'Raw Input', required: true },
-      { targetHeader: 'Owner', gatewayHeader: 'Owner', required: false },
-      { targetHeader: 'Related Document ID', gatewayHeader: 'Related Document ID', required: false },
-      { targetHeader: 'Related Task ID', gatewayHeader: 'Related Task ID', required: false },
-      { targetHeader: 'Source Gateway ID', gatewayHeader: 'Gateway ID', required: false }
-    ]
+    idHeader: 'KB Update ID',
+    idPrefix: 'KBU_',
+    idPattern: /^KBU_\d{4}$/,
+    idFormatHint: 'KBU_0001',
+    canAutoGenerateId: true,
+    appendable: false,
+    mappingComplete: false,
+    appendFields: []
   },
   '05_RISK': {
     idHeader: 'Risk ID',
-    idPrefix: 'RISK_',
-    idPattern: /^RISK_\d{4}$/,
-    appendable: true,
-    appendFields: [
-      { targetHeader: 'Risk ID', gatewayHeader: 'Target ID Proposed', required: true },
-      { targetHeader: 'Risk Description', gatewayHeader: 'Raw Input', required: true },
-      { targetHeader: 'Risk Level', gatewayHeader: 'Risk Level', required: true },
-      { targetHeader: 'Risk Action', gatewayHeader: 'Risk Action', required: true },
-      { targetHeader: 'Owner', gatewayHeader: 'Owner', required: false },
-      { targetHeader: 'Due Date', gatewayHeader: 'Due Date', required: false },
-      { targetHeader: 'Related Task ID', gatewayHeader: 'Related Task ID', required: false },
-      { targetHeader: 'Source Gateway ID', gatewayHeader: 'Gateway ID', required: false }
-    ]
+    idPrefix: 'R_',
+    idPattern: /^R_\d{4}$/,
+    idFormatHint: 'R_0001',
+    canAutoGenerateId: true,
+    appendable: false,
+    mappingComplete: false,
+    appendFields: []
   },
   '06_IDEA': {
     idHeader: 'Idea ID',
-    idPrefix: 'IDEA_',
-    idPattern: /^IDEA_\d{4}$/,
-    appendable: true,
-    appendFields: [
-      { targetHeader: 'Idea ID', gatewayHeader: 'Target ID Proposed', required: true },
-      { targetHeader: 'Idea Title', gatewayHeader: 'Raw Input', required: true },
-      { targetHeader: 'Priority', gatewayHeader: 'Priority', required: false },
-      { targetHeader: 'Owner', gatewayHeader: 'Owner', required: false },
-      { targetHeader: 'Source Gateway ID', gatewayHeader: 'Gateway ID', required: false }
-    ]
+    idPrefix: 'I_',
+    idPattern: /^I_\d{4}$/,
+    idFormatHint: 'I_0001',
+    canAutoGenerateId: true,
+    appendable: false,
+    mappingComplete: false,
+    appendFields: []
   }
 };
 
@@ -282,7 +272,12 @@ function runInputGatewayPhase1() {
   var dataRange = gatewaySheet.getRange(PCC_DATA_START_ROW, 1, lastRow - PCC_DATA_START_ROW + 1, lastCol);
   var values = dataRange.getValues();
 
-  var gatewayIdState = collectExistingIds_(gatewaySheet, gatewayHeaderMap, PCC_GATEWAY_HEADERS[0], PCC_GATEWAY_ID_PREFIX, PCC_GATEWAY_ID_PATTERN);
+  var gatewayIdState = collectExistingIds_(
+    gatewaySheet,
+    gatewayHeaderMap,
+    PCC_GATEWAY_HEADERS[0],
+    PCC_GATEWAY_ID_PATTERN
+  );
 
   for (var i = 0; i < values.length; i++) {
     var rowNumber = PCC_DATA_START_ROW + i;
@@ -324,7 +319,7 @@ function processGatewayRow_(ss, gatewaySheet, gatewayHeaderMap, rowObj, rowNumbe
   var updates = {};
   var validationCodes = [];
 
-  // Rule 1: Gateway ID trống → tự tạo
+  // Rule 1: Gateway ID trống → tự tạo GW_0001
   if (isBlank_(rowObj['Gateway ID'])) {
     var newGatewayId = generateNextGatewayId(gatewayIdState);
     updates['Gateway ID'] = newGatewayId;
@@ -374,7 +369,7 @@ function processGatewayRow_(ss, gatewaySheet, gatewayHeaderMap, rowObj, rowNumbe
   updates['Target Sheet Proposed'] = proposedSheet;
   rowObj['Target Sheet Proposed'] = proposedSheet;
 
-  // Rule 5: Target ID Proposed trống → tạo đề xuất
+  // Rule 5: Target ID Proposed trống → tạo đề xuất (nếu sheet cho phép auto-generate)
   if (isBlank_(rowObj['Target ID Proposed'])) {
     var generatedTargetId = generateNextTargetId(ss, proposedSheet, targetContext);
     if (generatedTargetId.error) {
@@ -402,7 +397,7 @@ function processGatewayRow_(ss, gatewaySheet, gatewayHeaderMap, rowObj, rowNumbe
     rowObj['Review Status'] = reviewStatus;
   }
 
-  var decisionManual = applyDecisionManualRules_(rowObj, updates);
+  applyDecisionManualRules_(rowObj, updates);
   rowObj['Transfer Mode'] = updates['Transfer Mode'] || rowObj['Transfer Mode'];
 
   // Rule 9: Target Sheet Approved khác Proposed → validate lại theo Approved
@@ -422,7 +417,7 @@ function processGatewayRow_(ss, gatewaySheet, gatewayHeaderMap, rowObj, rowNumbe
     }
   }
 
-  // Validate tổng thể
+  // Validate tổng thể (classify / gateway status – không append nếu mapping chưa đủ)
   var validation = validateInputGatewayRow(rowObj, targetContext, {
     reviewStatus: reviewStatus,
     effectiveSheet: effectiveSheet
@@ -445,7 +440,7 @@ function processGatewayRow_(ss, gatewaySheet, gatewayHeaderMap, rowObj, rowNumbe
     rowObj['Review Status'] = reviewStatus;
   }
 
-  // NEW → CLASSIFIED sau khi phân loại cơ bản (không lỗi input type)
+  // NEW → CLASSIFIED sau khi phân loại cơ bản
   if (reviewStatus === PCC_REVIEW_STATUS.NEW && validation.canClassify) {
     updates['Review Status'] = PCC_REVIEW_STATUS.CLASSIFIED;
     reviewStatus = PCC_REVIEW_STATUS.CLASSIFIED;
@@ -480,7 +475,7 @@ function processGatewayRow_(ss, gatewaySheet, gatewayHeaderMap, rowObj, rowNumbe
     }
   }
 
-  // Rule 10–11: APPROVED_TO_TRANSFER → append
+  // Rule 10–11: APPROVED_TO_TRANSFER → append (chỉ khi mapping đủ 100%)
   reviewStatus = normalizeText_(updates['Review Status'] || rowObj['Review Status']);
   if (reviewStatus === PCC_REVIEW_STATUS.APPROVED_TO_TRANSFER) {
     var transferResult = attemptAutoTransfer_(
@@ -511,11 +506,6 @@ function processGatewayRow_(ss, gatewaySheet, gatewayHeaderMap, rowObj, rowNumbe
 
 /**
  * Validate một dòng gateway theo Phase 1.
- *
- * @param {Object} rowObj Dữ liệu dòng gateway keyed by header
- * @param {Object} targetContext Context sheet đích đã cache
- * @param {Object} options Tuỳ chọn bổ sung
- * @return {Object} Kết quả validate
  */
 function validateInputGatewayRow(rowObj, targetContext, options) {
   options = options || {};
@@ -523,7 +513,6 @@ function validateInputGatewayRow(rowObj, targetContext, options) {
   var updates = {};
   var clarification = '';
   var effectiveSheet = options.effectiveSheet || getEffectiveTargetSheet_(rowObj);
-  var reviewStatus = options.reviewStatus || normalizeText_(rowObj['Review Status']);
 
   var inputType = normalizeText_(rowObj['Input Type']);
   if (!inputType || PCC_INPUT_TYPES.indexOf(inputType) === -1) {
@@ -552,9 +541,9 @@ function validateInputGatewayRow(rowObj, targetContext, options) {
   if (isBlank_(targetId)) {
     codes.push('MISSING_REQUIRED_DATA');
     clarification = clarification || 'Thiếu Target ID Proposed';
-  } else if (!sheetConfig.idPattern.test(targetId)) {
+  } else if (!isValidTargetIdFormat_(targetId, sheetConfig)) {
     codes.push('INVALID_TARGET_ID_FORMAT');
-    clarification = 'Target ID Proposed không đúng định dạng ' + sheetConfig.idPrefix + '0001';
+    clarification = 'Target ID Proposed không đúng định dạng PCC V0.2: ' + sheetConfig.idFormatHint;
   } else if (checkIdExists(effectiveSheet, sheetConfig.idHeader, targetId, targetContext)) {
     codes.push('DUPLICATE_TARGET_ID');
     clarification = 'Target ID Proposed đã tồn tại trong ' + effectiveSheet;
@@ -574,19 +563,21 @@ function validateInputGatewayRow(rowObj, targetContext, options) {
     }
   }
 
+  // Kiểm tra mapping append – Phase 1 chỉ pass khi mappingComplete và header khớp 100%
   var appendGuard = validateAppendMappingHeaders_(effectiveSheet, targetContext);
-  if (!appendGuard.ok && sheetConfig.appendable) {
+  if (!appendGuard.ok && normalizeText_(rowObj['Review Status']) === PCC_REVIEW_STATUS.APPROVED_TO_TRANSFER) {
     codes.push(appendGuard.errorCode);
     clarification = clarification || appendGuard.message;
   }
 
   var hasBlocking = hasBlockingValidation_(codes);
-  var canClassify = codes.length === 0 || !hasBlocking;
-  var canMoveToPendingReview = canClassify &&
+  var canClassify = !hasBlocking;
+
+  var idValid = !isBlank_(targetId) && isValidTargetIdFormat_(targetId, sheetConfig);
+  var canMoveToPendingReview = !hasBlocking &&
     hasSingleMainIdea_(rowObj['Raw Input']) &&
-    !isBlank_(rowObj['Target ID Proposed']) &&
-    sheetConfig.idPattern.test(normalizeText_(rowObj['Target ID Proposed'])) &&
-    !checkIdExists(effectiveSheet, sheetConfig.idHeader, normalizeText_(rowObj['Target ID Proposed']), targetContext) &&
+    idValid &&
+    !checkIdExists(effectiveSheet, sheetConfig.idHeader, targetId, targetContext) &&
     riskValidation.ok &&
     (inputType !== 'DECISION' || normalizeText_(rowObj['Transfer Mode']) === PCC_TRANSFER_MODE.MANUAL) &&
     (effectiveSheet !== PCC_SHEET.DECISION_LOG || normalizeText_(rowObj['Transfer Mode']) === PCC_TRANSFER_MODE.MANUAL);
@@ -668,7 +659,7 @@ function validateRiskRequirements_(rowObj, effectiveSheet) {
 }
 
 /**
- * Kiểm tra header mapping append của sheet đích.
+ * Kiểm tra mapping append – chỉ pass khi mappingComplete và mọi cột mapping tồn tại.
  */
 function validateAppendMappingHeaders_(sheetName, targetContext) {
   var config = PCC_TARGET_SHEET_CONFIG[sheetName];
@@ -680,8 +671,12 @@ function validateAppendMappingHeaders_(sheetName, targetContext) {
     };
   }
 
-  if (!config.appendable) {
-    return { ok: true };
+  if (!config.mappingComplete || !config.appendable) {
+    return {
+      ok: false,
+      errorCode: 'MISSING_APPEND_MAPPING',
+      message: 'Chưa có mapping append đầy đủ cho ' + sheetName + ' – Phase 1 không append'
+    };
   }
 
   if (!config.appendFields || config.appendFields.length === 0) {
@@ -702,15 +697,16 @@ function validateAppendMappingHeaders_(sheetName, targetContext) {
   }
 
   var missing = [];
-  config.appendFields.forEach(function (field) {
-    if (field.required && !headerMap[field.targetHeader]) {
-      missing.push(field.targetHeader);
-    }
-  });
 
   if (!headerMap[config.idHeader]) {
     missing.push(config.idHeader);
   }
+
+  config.appendFields.forEach(function (field) {
+    if (!headerMap[field.targetHeader]) {
+      missing.push(field.targetHeader);
+    }
+  });
 
   if (missing.length > 0) {
     return {
@@ -729,25 +725,34 @@ function validateAppendMappingHeaders_(sheetName, targetContext) {
 
 /**
  * Thử append tự động sang sheet đích khi đủ điều kiện Rule 10.
+ * Phase 1: chỉ append khi mapping header đích khớp 100%.
  */
 function attemptAutoTransfer_(ss, rowObj, effectiveSheet, targetContext, existingCodes, runTimestamp) {
   var updates = {};
   var codes = existingCodes.slice();
 
-  if (isBlank_(rowObj['Created Target ID']) === false || !isBlank_(rowObj['Transfer Date'])) {
+  if (!isBlank_(rowObj['Created Target ID']) || !isBlank_(rowObj['Transfer Date'])) {
     updates['Validation Result'] = 'ALREADY_TRANSFERRED';
     return { updates: updates, codes: codes };
   }
 
   var sheetConfig = PCC_TARGET_SHEET_CONFIG[effectiveSheet];
-  if (!sheetConfig || !sheetConfig.appendable) {
-    if (effectiveSheet === PCC_SHEET.DECISION_LOG) {
-      updates['Transfer Mode'] = PCC_TRANSFER_MODE.MANUAL;
-      updates['Validation Result'] = codes.length > 0 ? codes[codes.length - 1] : 'MANUAL_DECISION_REQUIRED';
-    } else {
-      codes.push('INVALID_TARGET_SHEET');
-      updates['Validation Result'] = 'INVALID_TARGET_SHEET';
-    }
+  if (!sheetConfig) {
+    codes.push('INVALID_TARGET_SHEET');
+    updates['Validation Result'] = 'INVALID_TARGET_SHEET';
+    return { updates: updates, codes: codes };
+  }
+
+  if (effectiveSheet === PCC_SHEET.DECISION_LOG) {
+    updates['Transfer Mode'] = PCC_TRANSFER_MODE.MANUAL;
+    updates['Validation Result'] = codes.length > 0 ? codes[codes.length - 1] : 'MANUAL_DECISION_REQUIRED';
+    return { updates: updates, codes: codes };
+  }
+
+  if (!sheetConfig.mappingComplete || !sheetConfig.appendable) {
+    codes.push('MISSING_APPEND_MAPPING');
+    updates['Validation Result'] = 'MISSING_APPEND_MAPPING';
+    updates['Clarification Needed'] = 'Chưa có mapping append đầy đủ cho ' + effectiveSheet + ' – Phase 1 không append';
     return { updates: updates, codes: codes };
   }
 
@@ -758,9 +763,10 @@ function attemptAutoTransfer_(ss, rowObj, effectiveSheet, targetContext, existin
   }
 
   var targetId = normalizeText_(rowObj['Target ID Proposed']);
-  if (!sheetConfig.idPattern.test(targetId)) {
+  if (!isValidTargetIdFormat_(targetId, sheetConfig)) {
     codes.push('INVALID_TARGET_ID_FORMAT');
     updates['Validation Result'] = 'INVALID_TARGET_ID_FORMAT';
+    updates['Clarification Needed'] = 'Định dạng ID không hợp lệ. Yêu cầu: ' + sheetConfig.idFormatHint;
     updates['Review Status'] = PCC_REVIEW_STATUS.NEEDS_CLARIFICATION;
     return { updates: updates, codes: codes };
   }
@@ -781,7 +787,6 @@ function attemptAutoTransfer_(ss, rowObj, effectiveSheet, targetContext, existin
     codes.push(appendGuard.errorCode);
     updates['Validation Result'] = appendGuard.errorCode;
     updates['Clarification Needed'] = appendGuard.message;
-    updates['Review Status'] = PCC_REVIEW_STATUS.NEEDS_CLARIFICATION;
     logPccError(ss, appendGuard.errorCode, appendGuard.message, {
       gatewayId: rowObj['Gateway ID'],
       details: effectiveSheet
@@ -789,7 +794,7 @@ function attemptAutoTransfer_(ss, rowObj, effectiveSheet, targetContext, existin
     return { updates: updates, codes: codes };
   }
 
-  var appendResult = appendToTargetSheet(ss, effectiveSheet, rowObj, targetContext);
+  var appendResult = appendToTargetSheet(ss, effectiveSheet, rowObj, targetContext, runTimestamp);
   if (!appendResult.ok) {
     codes.push(appendResult.errorCode);
     updates['Validation Result'] = appendResult.errorCode;
@@ -837,10 +842,10 @@ function processDecisionManualTransfer_(ss, rowObj, targetContext, runTimestamp)
   }
 
   var decisionConfig = PCC_TARGET_SHEET_CONFIG[PCC_SHEET.DECISION_LOG];
-  if (!decisionConfig.idPattern.test(createdId)) {
+  if (!isValidTargetIdFormat_(createdId, decisionConfig)) {
     codes.push('INVALID_DECISION_ID');
     updates['Validation Result'] = 'INVALID_DECISION_ID';
-    updates['Review Status'] = rowObj['Review Status'];
+    updates['Clarification Needed'] = 'Decision ID không đúng định dạng ' + decisionConfig.idFormatHint;
     return { updates: updates, codes: codes, done: true };
   }
 
@@ -858,14 +863,15 @@ function processDecisionManualTransfer_(ss, rowObj, targetContext, runTimestamp)
 
 /**
  * Append một dòng mới vào sheet đích theo mapping đã khai báo.
+ * Chỉ gọi khi validateAppendMappingHeaders_ đã pass.
  */
-function appendToTargetSheet(ss, sheetName, rowObj, targetContext) {
+function appendToTargetSheet(ss, sheetName, rowObj, targetContext, runTimestamp) {
   var config = PCC_TARGET_SHEET_CONFIG[sheetName];
-  if (!config || !config.appendable) {
+  if (!config || !config.appendable || !config.mappingComplete) {
     return {
       ok: false,
       errorCode: 'MISSING_APPEND_MAPPING',
-      message: 'Sheet không được append tự động: ' + sheetName
+      message: 'Sheet không được append tự động trong Phase 1: ' + sheetName
     };
   }
 
@@ -894,14 +900,24 @@ function appendToTargetSheet(ss, sheetName, rowObj, targetContext) {
     rowValues[c] = '';
   }
 
-  config.appendFields.forEach(function (field) {
+  for (var f = 0; f < config.appendFields.length; f++) {
+    var field = config.appendFields[f];
     var targetCol = headerMap[field.targetHeader];
     if (!targetCol) {
-      return;
+      return {
+        ok: false,
+        errorCode: 'MISSING_TARGET_HEADER',
+        message: 'Thiếu header "' + field.targetHeader + '" trong ' + sheetName
+      };
     }
     var value = rowObj[field.gatewayHeader];
     rowValues[targetCol - 1] = value === undefined || value === null ? '' : value;
-  });
+  }
+
+  // Ghi Last Update nếu sheet đích có cột này (01_TASK đã xác nhận)
+  if (headerMap['Last Update']) {
+    rowValues[headerMap['Last Update'] - 1] = runTimestamp || new Date();
+  }
 
   try {
     var nextRow = Math.max(sheet.getLastRow() + 1, PCC_DATA_START_ROW);
@@ -929,7 +945,7 @@ function generateNextGatewayId(gatewayIdState) {
 }
 
 /**
- * Sinh Target ID đề xuất cho sheet đích.
+ * Sinh Target ID đề xuất cho sheet đích theo PCC V0.2.
  */
 function generateNextTargetId(ss, sheetName, targetContext) {
   var config = PCC_TARGET_SHEET_CONFIG[sheetName];
@@ -938,6 +954,23 @@ function generateNextTargetId(ss, sheetName, targetContext) {
       error: true,
       errorCode: 'INVALID_TARGET_SHEET',
       message: 'Không có cấu hình ID cho sheet: ' + sheetName
+    };
+  }
+
+  if (config.canAutoGenerateId === false) {
+    return {
+      error: true,
+      errorCode: 'MISSING_REQUIRED_DATA',
+      message: 'Target ID Proposed phải điền thủ công cho ' + sheetName +
+        ' (định dạng: ' + config.idFormatHint + ')'
+    };
+  }
+
+  if (!config.idPrefix) {
+    return {
+      error: true,
+      errorCode: 'MISSING_APPEND_MAPPING',
+      message: 'Không thể tự sinh ID cho ' + sheetName + ' – thiếu cấu hình prefix'
     };
   }
 
@@ -999,6 +1032,16 @@ function checkIdExists(sheetName, idHeader, idValue, targetContext) {
     }
   }
   return false;
+}
+
+/**
+ * Kiểm tra định dạng ID theo PCC V0.2.
+ */
+function isValidTargetIdFormat_(idValue, sheetConfig) {
+  if (!idValue || !sheetConfig || !sheetConfig.idPattern) {
+    return false;
+  }
+  return sheetConfig.idPattern.test(normalizeText_(idValue));
 }
 
 // ---------------------------------------------------------------------------
@@ -1154,6 +1197,7 @@ function logPccError(ss, errorCode, message, context) {
 
 /**
  * Cache header map và trạng thái ID cho các sheet đích.
+ * Chỉ yêu cầu cột ID (idHeader) – không yêu cầu toàn bộ header append.
  */
 function buildTargetContext_(ss) {
   var context = {
@@ -1191,7 +1235,6 @@ function buildTargetContext_(ss) {
       sheet,
       headerMap,
       config.idHeader,
-      config.idPrefix,
       config.idPattern
     );
   });
@@ -1200,9 +1243,9 @@ function buildTargetContext_(ss) {
 }
 
 /**
- * Thu thập ID hiện có và số thứ tự lớn nhất theo prefix.
+ * Thu thập ID hiện có và số thứ tự lớn nhất theo pattern PCC V0.2.
  */
-function collectExistingIds_(sheet, headerMap, idHeader, idPrefix, idPattern) {
+function collectExistingIds_(sheet, headerMap, idHeader, idPattern) {
   var state = {
     existing: {},
     maxNum: 0
