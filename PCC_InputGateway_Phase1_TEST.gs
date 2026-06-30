@@ -6,7 +6,7 @@
  * Quyết định áp dụng:
  * - D_0011, D_0012, D_0013, D_0014, D_0015, D_0016
  * - D_0017, D_0018 (Phase 1 TEST: không append sang sheet đích)
-+ *
+ *
  * Nguyên tắc bắt buộc:
  * - Header row = 3, data bắt đầu = 4
  * - Lookup cột theo tên header
@@ -296,7 +296,7 @@ function runInputGatewayPhase1Test() {
 function validateGatewayRowPhase1(ss, rowObject, rowNumber, context) {
   var updates = {};
   var notes = [];
-  var errors = [];
+  var validationEvents = [];
 
   // 1) Raw Input trống đã được skip từ main loop.
 
@@ -321,7 +321,7 @@ function validateGatewayRowPhase1(ss, rowObject, rowNumber, context) {
     reviewStatus = PCC_VALID_REVIEW_STATUS.NEEDS_CLARIFICATION;
     updates['Review Status'] = reviewStatus;
     rowObject['Review Status'] = reviewStatus;
-    errors.push(PCC_VALIDATION_RESULT.INVALID_REVIEW_STATUS);
+    validationEvents.push(PCC_VALIDATION_RESULT.INVALID_REVIEW_STATUS);
     notes.push('Review Status không hợp lệ');
   }
 
@@ -332,7 +332,7 @@ function validateGatewayRowPhase1(ss, rowObject, rowNumber, context) {
     reviewStatus = PCC_VALID_REVIEW_STATUS.NEEDS_CLARIFICATION;
     updates['Review Status'] = reviewStatus;
     rowObject['Review Status'] = reviewStatus;
-    errors.push(PCC_VALIDATION_RESULT.INVALID_INPUT_TYPE);
+    validationEvents.push(PCC_VALIDATION_RESULT.INVALID_INPUT_TYPE);
     notes.push('Input Type không hợp lệ hoặc còn trống');
   }
 
@@ -353,7 +353,7 @@ function validateGatewayRowPhase1(ss, rowObject, rowNumber, context) {
     reviewStatus = PCC_VALID_REVIEW_STATUS.NEEDS_CLARIFICATION;
     updates['Review Status'] = reviewStatus;
     rowObject['Review Status'] = reviewStatus;
-    errors.push(PCC_VALIDATION_RESULT.INVALID_TARGET_SHEET);
+    validationEvents.push(PCC_VALIDATION_RESULT.INVALID_TARGET_SHEET);
     notes.push('Target Sheet không hợp lệ');
   }
 
@@ -366,7 +366,7 @@ function validateGatewayRowPhase1(ss, rowObject, rowNumber, context) {
       updates['Target ID Proposed'] = targetIdProposed;
       rowObject['Target ID Proposed'] = targetIdProposed;
     } else {
-      errors.push(PCC_VALIDATION_RESULT.MISSING_TARGET_ID);
+      validationEvents.push(PCC_VALIDATION_RESULT.MISSING_TARGET_ID);
       notes.push(suggestion.message);
     }
   }
@@ -379,18 +379,18 @@ function validateGatewayRowPhase1(ss, rowObject, rowNumber, context) {
   // 8) Validate format Target ID theo sheet hiệu lực
   if (!isBlank(targetIdProposed) && effectiveTargetConfig) {
     if (!effectiveTargetConfig.pattern.test(targetIdProposed)) {
-      errors.push(PCC_VALIDATION_RESULT.INVALID_TARGET_ID_FORMAT);
+      validationEvents.push(PCC_VALIDATION_RESULT.INVALID_TARGET_ID_FORMAT);
       notes.push('Target ID Proposed sai định dạng theo ' + effectiveTargetSheet);
     }
   } else if (isBlank(targetIdProposed) && effectiveTargetConfig) {
-    errors.push(PCC_VALIDATION_RESULT.MISSING_TARGET_ID);
+    validationEvents.push(PCC_VALIDATION_RESULT.MISSING_TARGET_ID);
     notes.push('Thiếu Target ID Proposed');
   }
 
   // 9) Kiểm tra trùng trong sheet đích
   if (!isBlank(targetIdProposed) && effectiveTargetConfig && effectiveTargetConfig.pattern.test(targetIdProposed)) {
     if (checkIdExists(effectiveTargetSheet, targetIdProposed, context)) {
-      errors.push(PCC_VALIDATION_RESULT.DUPLICATE_TARGET_ID);
+      validationEvents.push(PCC_VALIDATION_RESULT.DUPLICATE_TARGET_ID);
       notes.push('Target ID Proposed đã tồn tại trong sheet đích');
     }
   }
@@ -398,7 +398,7 @@ function validateGatewayRowPhase1(ss, rowObject, rowNumber, context) {
   // 10) Kiểm tra trùng giữa các dòng gateway cùng lần chạy
   if (!isBlank(targetIdProposed) && !isBlank(effectiveTargetSheet)) {
     if (isProposedIdDuplicateInRun(context.proposedIdsInRun, effectiveTargetSheet, targetIdProposed, rowNumber)) {
-      errors.push(PCC_VALIDATION_RESULT.DUPLICATE_TARGET_ID_IN_GATEWAY_RUN);
+      validationEvents.push(PCC_VALIDATION_RESULT.DUPLICATE_TARGET_ID_IN_GATEWAY_RUN);
       notes.push('Target ID Proposed trùng với dòng gateway khác trong lần chạy');
     }
   }
@@ -408,7 +408,7 @@ function validateGatewayRowPhase1(ss, rowObject, rowNumber, context) {
     reviewStatus = PCC_VALID_REVIEW_STATUS.NEEDS_CLARIFICATION;
     updates['Review Status'] = reviewStatus;
     rowObject['Review Status'] = reviewStatus;
-    errors.push(PCC_VALIDATION_RESULT.MULTIPLE_MAIN_IDEAS);
+    validationEvents.push(PCC_VALIDATION_RESULT.MULTIPLE_MAIN_IDEAS);
     notes.push('Một dòng Gateway chỉ được đại diện cho một bản ghi đích');
   }
 
@@ -419,14 +419,14 @@ function validateGatewayRowPhase1(ss, rowObject, rowNumber, context) {
       reviewStatus = PCC_VALID_REVIEW_STATUS.NEEDS_CLARIFICATION;
       updates['Review Status'] = reviewStatus;
       rowObject['Review Status'] = reviewStatus;
-      errors.push(PCC_VALIDATION_RESULT.MISSING_RISK_LEVEL);
+      validationEvents.push(PCC_VALIDATION_RESULT.MISSING_RISK_LEVEL);
       notes.push('Thiếu Risk Level');
     }
     if (isBlank(rowObject['Risk Action'])) {
       reviewStatus = PCC_VALID_REVIEW_STATUS.NEEDS_CLARIFICATION;
       updates['Review Status'] = reviewStatus;
       rowObject['Review Status'] = reviewStatus;
-      errors.push(PCC_VALIDATION_RESULT.MISSING_RISK_ACTION);
+      validationEvents.push(PCC_VALIDATION_RESULT.MISSING_RISK_ACTION);
       notes.push('Thiếu Risk Action');
     }
   }
@@ -444,15 +444,15 @@ function validateGatewayRowPhase1(ss, rowObject, rowNumber, context) {
     if (!isBlank(createdDecisionId)) {
       var decisionPattern = PCC_TARGET_ID_CONFIG[PCC_SHEET.DECISION_LOG].pattern;
       if (!decisionPattern.test(createdDecisionId)) {
-        errors.push(PCC_VALIDATION_RESULT.INVALID_DECISION_ID);
+        validationEvents.push(PCC_VALIDATION_RESULT.INVALID_DECISION_ID);
         notes.push('Created Target ID không đúng định dạng Decision ID');
       } else {
         var decisionExists = checkIdExists(PCC_SHEET.DECISION_LOG, createdDecisionId, context);
         if (decisionExists) {
-          errors.push(PCC_VALIDATION_RESULT.DECISION_ID_CONFIRMED);
+          validationEvents.push(PCC_VALIDATION_RESULT.DECISION_ID_CONFIRMED);
           notes.push('Decision ID đã tồn tại trong 03_DECISION_LOG');
         } else {
-          errors.push(PCC_VALIDATION_RESULT.DECISION_ID_NOT_FOUND);
+          validationEvents.push(PCC_VALIDATION_RESULT.DECISION_ID_NOT_FOUND);
           notes.push('Không tìm thấy Decision ID trong 03_DECISION_LOG');
         }
       }
@@ -462,19 +462,19 @@ function validateGatewayRowPhase1(ss, rowObject, rowNumber, context) {
   // 16) REJECTED bắt buộc có Rejected Reason
   if (reviewStatus === PCC_VALID_REVIEW_STATUS.REJECTED) {
     if (isBlank(rowObject['Rejected Reason'])) {
-      errors.push(PCC_VALIDATION_RESULT.REJECTED_REASON_REQUIRED);
+      validationEvents.push(PCC_VALIDATION_RESULT.REJECTED_REASON_REQUIRED);
       notes.push('Rejected Reason là bắt buộc khi Review Status = REJECTED');
     }
   }
 
   // 17) APPROVED_TO_TRANSFER trong Phase 1 TEST => luôn disable append
   if (reviewStatus === PCC_VALID_REVIEW_STATUS.APPROVED_TO_TRANSFER) {
-    errors.push(PCC_VALIDATION_RESULT.APPROVED_BUT_APPEND_DISABLED_PHASE1);
+    validationEvents.push(PCC_VALIDATION_RESULT.APPROVED_BUT_APPEND_DISABLED_PHASE1);
     notes.push('Phase 1 TEST không append sang sheet đích');
   }
 
   // 18,19) Chuyển trạng thái NEW/CLASSIFIED khi đủ điều kiện
-  var readiness = evaluateReadiness_(rowObject, reviewStatus, errors);
+  var readiness = evaluateReadiness_(rowObject, reviewStatus, validationEvents);
   if (reviewStatus === PCC_VALID_REVIEW_STATUS.NEW && readiness.canClassify) {
     updates['Review Status'] = PCC_VALID_REVIEW_STATUS.CLASSIFIED;
     reviewStatus = PCC_VALID_REVIEW_STATUS.CLASSIFIED;
@@ -497,7 +497,7 @@ function validateGatewayRowPhase1(ss, rowObject, rowNumber, context) {
   }
 
   // Resolve Validation Result theo enum cố định
-  var finalValidationResult = resolveValidationResult_(errors);
+  var finalValidationResult = resolveValidationResult_(validationEvents);
   updates['Validation Result'] = finalValidationResult;
 
   // Clarification
@@ -1044,7 +1044,7 @@ function isValidInputType_(value) {
 /**
  * Đánh giá điều kiện chuyển trạng thái NEW/CLASSIFIED.
  */
-function evaluateReadiness_(rowObject, reviewStatus, errors) {
+function evaluateReadiness_(rowObject, reviewStatus, validationEvents) {
   var blockingCodes = {
     INVALID_REVIEW_STATUS: true,
     INVALID_INPUT_TYPE: true,
@@ -1065,8 +1065,8 @@ function evaluateReadiness_(rowObject, reviewStatus, errors) {
   };
 
   var hasBlockingError = false;
-  for (var i = 0; i < errors.length; i++) {
-    if (blockingCodes[errors[i]]) {
+  for (var i = 0; i < validationEvents.length; i++) {
+    if (blockingCodes[validationEvents[i]]) {
       hasBlockingError = true;
       break;
     }
@@ -1094,8 +1094,8 @@ function evaluateReadiness_(rowObject, reviewStatus, errors) {
  * Resolve Validation Result cuối cùng theo thứ tự ưu tiên.
  * Không dùng giá trị ngoài enum cố định.
  */
-function resolveValidationResult_(errors) {
-  if (!errors || errors.length === 0) {
+function resolveValidationResult_(validationEvents) {
+  if (!validationEvents || validationEvents.length === 0) {
     return PCC_VALIDATION_RESULT.VALIDATION_OK;
   }
 
@@ -1121,8 +1121,8 @@ function resolveValidationResult_(errors) {
   ];
 
   var unique = {};
-  for (var i = 0; i < errors.length; i++) {
-    unique[errors[i]] = true;
+  for (var i = 0; i < validationEvents.length; i++) {
+    unique[validationEvents[i]] = true;
   }
 
   for (var p = 0; p < priority.length; p++) {
