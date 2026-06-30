@@ -439,7 +439,7 @@ function validateGatewayRowPhase1(ss, rowObject, rowNumber, context) {
   }
 
   // 15) DECISION MANUAL confirm branch
-  if (targetSheetApproved === PCC_SHEET.DECISION_LOG) {
+  if (effectiveTargetSheet === PCC_SHEET.DECISION_LOG) {
     var createdDecisionId = normalizeText(rowObject['Created Target ID']);
     if (!isBlank(createdDecisionId)) {
       var decisionPattern = PCC_TARGET_ID_CONFIG[PCC_SHEET.DECISION_LOG].pattern;
