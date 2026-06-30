@@ -1,18 +1,21 @@
 /**
  * PCC_InputGateway_Phase1_TEST.gs
  * PC_00_PROJECT_CONTROL_CENTER V0.3
- * Input Gateway Script – Phase 1
+ * Input Gateway Phase 1 TEST (Validation-only / Classification-only)
  *
- * Quyết định tham chiếu: D_0011 → D_0016
- * ID format tham chiếu: PCC V0.2
- * Chạy thủ công qua menu "PCC V0.3" > "Run Input Gateway Phase 1"
- *
- * Nguyên tắc:
- * - Header row = 3, data bắt đầu từ dòng 4
- * - Lookup cột theo tên header, không hard-code số cột
- * - Không ghi 00_DASHBOARD, không append/sửa 03_DECISION_LOG
- * - Chỉ append khi mapping header đích đã xác nhận 100%
- * - Thiếu sheet/header bắt buộc → dừng và ghi PCC_ERROR_LOG
+ * Quyết định áp dụng:
+ * - D_0011, D_0012, D_0013, D_0014, D_0015, D_0016
+ * - D_0017, D_0018 (Phase 1 TEST: không append sang sheet đích)
++ *
+ * Nguyên tắc bắt buộc:
+ * - Header row = 3, data bắt đầu = 4
+ * - Lookup cột theo tên header
+ * - Không tạo trigger tự động
+ * - Chỉ chạy thủ công bằng menu
+ * - Không ghi 00_DASHBOARD
+ * - Không ghi bất kỳ sheet đích nào (01..06)
+ * - Chỉ cập nhật một số cột cho phép trong 07_INPUT_GATEWAY
+ * - Chỉ ghi lỗi vào PCC_ERROR_LOG
  */
 
 // ---------------------------------------------------------------------------
@@ -22,8 +25,9 @@
 var PCC_SCRIPT_NAME = 'PCC_InputGateway_Phase1_TEST';
 var PCC_HEADER_ROW = 3;
 var PCC_DATA_START_ROW = 4;
+
 var PCC_MENU_NAME = 'PCC V0.3';
-var PCC_MENU_ITEM = 'Run Input Gateway Phase 1';
+var PCC_MENU_ITEM = 'Run Input Gateway Phase 1 TEST';
 
 var PCC_SHEET = {
   DASHBOARD: '00_DASHBOARD',
@@ -81,18 +85,18 @@ var PCC_ERROR_LOG_HEADERS = [
   'Suggested Action'
 ];
 
-var PCC_INPUT_TYPES = ['TASK', 'DOCUMENT', 'DECISION', 'NOTEBOOKLM', 'RISK', 'IDEA'];
-
-var PCC_INPUT_TYPE_TO_SHEET = {
-  TASK: PCC_SHEET.TASK,
-  DOCUMENT: PCC_SHEET.DOCUMENT,
-  DECISION: PCC_SHEET.DECISION_LOG,
-  NOTEBOOKLM: PCC_SHEET.NOTEBOOKLM,
-  RISK: PCC_SHEET.RISK,
-  IDEA: PCC_SHEET.IDEA
+var PCC_ALLOWED_GATEWAY_UPDATE_HEADERS = {
+  'Gateway ID': true,
+  'Target Sheet Proposed': true,
+  'Target ID Proposed': true,
+  'Review Status': true,
+  'Transfer Mode': true,
+  'Validation Result': true,
+  'Clarification Needed': true,
+  'Last Update': true
 };
 
-var PCC_REVIEW_STATUS = {
+var PCC_VALID_REVIEW_STATUS = {
   NEW: 'NEW',
   CLASSIFIED: 'CLASSIFIED',
   PENDING_REVIEW: 'PENDING_REVIEW',
@@ -102,120 +106,99 @@ var PCC_REVIEW_STATUS = {
   REJECTED: 'REJECTED'
 };
 
-var PCC_VALID_REVIEW_STATUSES = [
-  PCC_REVIEW_STATUS.NEW,
-  PCC_REVIEW_STATUS.CLASSIFIED,
-  PCC_REVIEW_STATUS.PENDING_REVIEW,
-  PCC_REVIEW_STATUS.NEEDS_CLARIFICATION,
-  PCC_REVIEW_STATUS.APPROVED_TO_TRANSFER,
-  PCC_REVIEW_STATUS.TRANSFERRED,
-  PCC_REVIEW_STATUS.REJECTED
+var PCC_REVIEW_STATUS_LIST = [
+  PCC_VALID_REVIEW_STATUS.NEW,
+  PCC_VALID_REVIEW_STATUS.CLASSIFIED,
+  PCC_VALID_REVIEW_STATUS.PENDING_REVIEW,
+  PCC_VALID_REVIEW_STATUS.NEEDS_CLARIFICATION,
+  PCC_VALID_REVIEW_STATUS.APPROVED_TO_TRANSFER,
+  PCC_VALID_REVIEW_STATUS.TRANSFERRED,
+  PCC_VALID_REVIEW_STATUS.REJECTED
 ];
 
-var PCC_TRANSFER_MODE = {
-  MANUAL: 'MANUAL',
-  AUTO: 'AUTO'
+var PCC_INPUT_TYPE_LIST = [
+  'TASK',
+  'DOCUMENT',
+  'DECISION',
+  'NOTEBOOKLM',
+  'RISK',
+  'IDEA'
+];
+
+var PCC_INPUT_TYPE_TO_TARGET_SHEET = {
+  TASK: PCC_SHEET.TASK,
+  DOCUMENT: PCC_SHEET.DOCUMENT,
+  DECISION: PCC_SHEET.DECISION_LOG,
+  NOTEBOOKLM: PCC_SHEET.NOTEBOOKLM,
+  RISK: PCC_SHEET.RISK,
+  IDEA: PCC_SHEET.IDEA
 };
 
-/** PCC V0.2 – Gateway ID: GW_0001 */
+var PCC_TRANSFER_MODE = {
+  MANUAL: 'MANUAL'
+};
+
+var PCC_VALIDATION_RESULT = {
+  VALIDATION_OK: 'VALIDATION_OK',
+  INVALID_REVIEW_STATUS: 'INVALID_REVIEW_STATUS',
+  INVALID_INPUT_TYPE: 'INVALID_INPUT_TYPE',
+  INVALID_TARGET_SHEET: 'INVALID_TARGET_SHEET',
+  MISSING_TARGET_ID: 'MISSING_TARGET_ID',
+  INVALID_TARGET_ID_FORMAT: 'INVALID_TARGET_ID_FORMAT',
+  DUPLICATE_TARGET_ID: 'DUPLICATE_TARGET_ID',
+  DUPLICATE_TARGET_ID_IN_GATEWAY_RUN: 'DUPLICATE_TARGET_ID_IN_GATEWAY_RUN',
+  MULTIPLE_MAIN_IDEAS: 'MULTIPLE_MAIN_IDEAS',
+  MISSING_RISK_LEVEL: 'MISSING_RISK_LEVEL',
+  MISSING_RISK_ACTION: 'MISSING_RISK_ACTION',
+  REJECTED_REASON_REQUIRED: 'REJECTED_REASON_REQUIRED',
+  DECISION_ID_CONFIRMED: 'DECISION_ID_CONFIRMED',
+  INVALID_DECISION_ID: 'INVALID_DECISION_ID',
+  DECISION_ID_NOT_FOUND: 'DECISION_ID_NOT_FOUND',
+  APPROVED_BUT_APPEND_DISABLED_PHASE1: 'APPROVED_BUT_APPEND_DISABLED_PHASE1',
+  MISSING_REQUIRED_DATA: 'MISSING_REQUIRED_DATA',
+  MISSING_SHEET: 'MISSING_SHEET',
+  MISSING_HEADER: 'MISSING_HEADER'
+};
+
 var PCC_GATEWAY_ID_PREFIX = 'GW_';
 var PCC_GATEWAY_ID_PATTERN = /^GW_\d{4}$/;
 
-/**
- * Cấu hình sheet đích theo PCC V0.2.
- *
- * - idHeader / idPattern: dùng cho validate ID và kiểm tra trùng
- * - canAutoGenerateId: false khi không thể tự sinh ID (vd. DOCUMENT: MF_xx_xx_NAME / PC_xx_NAME)
- * - mappingComplete + appendable: chỉ true khi đã xác nhận 100% header mapping
- * - appendFields: chỉ khai báo cột đích đã xác nhận; thiếu bất kỳ cột nào → không append
- */
-var PCC_TARGET_SHEET_CONFIG = {
+var PCC_TARGET_ID_CONFIG = {
   '01_TASK': {
     idHeader: 'Task ID',
-    idPrefix: 'T_',
-    idPattern: /^T_\d{4}$/,
-    idFormatHint: 'T_0001',
-    canAutoGenerateId: true,
-    appendable: true,
-    mappingComplete: true,
-    appendFields: [
-      { targetHeader: 'Task ID', gatewayHeader: 'Target ID Proposed' },
-      { targetHeader: 'Task Name', gatewayHeader: 'Raw Input' },
-      { targetHeader: 'Priority', gatewayHeader: 'Priority' },
-      { targetHeader: 'Owner', gatewayHeader: 'Owner' },
-      { targetHeader: 'Due Date', gatewayHeader: 'Due Date' },
-      { targetHeader: 'Related Document', gatewayHeader: 'Related Document ID' },
-      { targetHeader: 'Source', gatewayHeader: 'Gateway ID' },
-      { targetHeader: 'Remark', gatewayHeader: 'Remark' }
-    ]
+    prefix: 'T_',
+    pattern: /^T_\d{4}$/,
+    suggestable: true
   },
   '02_DOCUMENT': {
     idHeader: 'Document ID',
-    idPattern: /^(MF|PC)_[A-Z0-9_]+$/,
-    idFormatHint: 'MF_xx_xx_NAME hoặc PC_xx_NAME',
-    canAutoGenerateId: false,
-    appendable: false,
-    mappingComplete: false,
-    appendFields: []
+    pattern: /^(MF|PC)_[A-Z0-9_]+$/,
+    suggestable: false
   },
   '03_DECISION_LOG': {
     idHeader: 'Decision ID',
-    idPrefix: 'D_',
-    idPattern: /^D_\d{4}$/,
-    idFormatHint: 'D_0001',
-    canAutoGenerateId: true,
-    appendable: false,
-    mappingComplete: false,
-    appendFields: []
+    prefix: 'D_',
+    pattern: /^D_\d{4}$/,
+    suggestable: true
   },
   '04_NOTEBOOKLM': {
     idHeader: 'KB Update ID',
-    idPrefix: 'KBU_',
-    idPattern: /^KBU_\d{4}$/,
-    idFormatHint: 'KBU_0001',
-    canAutoGenerateId: true,
-    appendable: false,
-    mappingComplete: false,
-    appendFields: []
+    prefix: 'KBU_',
+    pattern: /^KBU_\d{4}$/,
+    suggestable: true
   },
   '05_RISK': {
     idHeader: 'Risk ID',
-    idPrefix: 'R_',
-    idPattern: /^R_\d{4}$/,
-    idFormatHint: 'R_0001',
-    canAutoGenerateId: true,
-    appendable: false,
-    mappingComplete: false,
-    appendFields: []
+    prefix: 'R_',
+    pattern: /^R_\d{4}$/,
+    suggestable: true
   },
   '06_IDEA': {
     idHeader: 'Idea ID',
-    idPrefix: 'I_',
-    idPattern: /^I_\d{4}$/,
-    idFormatHint: 'I_0001',
-    canAutoGenerateId: true,
-    appendable: false,
-    mappingComplete: false,
-    appendFields: []
+    prefix: 'I_',
+    pattern: /^I_\d{4}$/,
+    suggestable: true
   }
-};
-
-var PCC_BLOCKING_VALIDATION_CODES = {
-  INVALID_INPUT_TYPE: true,
-  INVALID_TARGET_SHEET: true,
-  MISSING_REQUIRED_DATA: true,
-  MISSING_RISK_LEVEL: true,
-  MISSING_RISK_ACTION: true,
-  INVALID_TARGET_ID_FORMAT: true,
-  DUPLICATE_TARGET_ID: true,
-  MULTIPLE_MAIN_IDEAS: true,
-  MISSING_TARGET_HEADER: true,
-  MISSING_APPEND_MAPPING: true,
-  REJECTED_REASON_REQUIRED: true,
-  INVALID_DECISION_ID: true,
-  DECISION_ID_NOT_FOUND: true,
-  TARGET_WRITE_ERROR: true,
-  INVALID_REVIEW_STATUS: true
 };
 
 // ---------------------------------------------------------------------------
@@ -223,12 +206,12 @@ var PCC_BLOCKING_VALIDATION_CODES = {
 // ---------------------------------------------------------------------------
 
 /**
- * Tạo menu PCC khi mở spreadsheet.
+ * Tạo menu chạy thủ công.
  */
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu(PCC_MENU_NAME)
-    .addItem(PCC_MENU_ITEM, 'runInputGatewayPhase1')
+    .addItem(PCC_MENU_ITEM, 'runInputGatewayPhase1Test')
     .addToUi();
 }
 
@@ -237,21 +220,25 @@ function onOpen() {
 // ---------------------------------------------------------------------------
 
 /**
- * Hàm chính – xử lý toàn bộ dòng trong 07_INPUT_GATEWAY (Phase 1).
+ * Hàm chính Phase 1 TEST.
+ * - Validation-only / classification-only
+ * - Không append bất kỳ sheet đích nào
  */
-function runInputGatewayPhase1() {
+function runInputGatewayPhase1Test() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var runTimestamp = new Date();
 
-  if (!ensureRequiredSheets(ss)) {
+  var requiredSheetsOk = ensureRequiredSheets(ss);
+  if (!requiredSheetsOk) {
     return;
   }
 
   var gatewaySheet = ss.getSheetByName(PCC_SHEET.INPUT_GATEWAY);
   var gatewayHeaderMap = getHeaderMap(gatewaySheet);
   if (!gatewayHeaderMap) {
-    logPccError(ss, 'MISSING_GATEWAY_HEADERS', 'Không đọc được header tại dòng ' + PCC_HEADER_ROW, {
-      sheetName: PCC_SHEET.INPUT_GATEWAY
+    logPccError(ss, PCC_VALIDATION_RESULT.MISSING_HEADER, 'Không đọc được header 07_INPUT_GATEWAY', {
+      sheetName: PCC_SHEET.INPUT_GATEWAY,
+      severity: 'ERROR',
+      suggestedAction: 'Kiểm tra header row = 3'
     });
     return;
   }
@@ -260,8 +247,17 @@ function runInputGatewayPhase1() {
     return;
   }
 
-  var targetContext = buildTargetContext_(ss);
-  if (!targetContext.ok) {
+  var errorSheet = ss.getSheetByName(PCC_SHEET.ERROR_LOG);
+  var errorHeaderMap = getHeaderMap(errorSheet);
+  if (!errorHeaderMap) {
+    return;
+  }
+  if (!ensureRequiredHeaders(ss, errorSheet, errorHeaderMap, PCC_ERROR_LOG_HEADERS, PCC_SHEET.ERROR_LOG)) {
+    return;
+  }
+
+  var context = buildRuntimeContext_(ss, gatewaySheet, gatewayHeaderMap);
+  if (!context.ok) {
     return;
   }
 
@@ -271,807 +267,494 @@ function runInputGatewayPhase1() {
   }
 
   var lastCol = gatewaySheet.getLastColumn();
-  var dataRange = gatewaySheet.getRange(PCC_DATA_START_ROW, 1, lastRow - PCC_DATA_START_ROW + 1, lastCol);
-  var values = dataRange.getValues();
-
-  var gatewayIdState = collectExistingIds_(
-    gatewaySheet,
-    gatewayHeaderMap,
-    PCC_GATEWAY_HEADERS[0],
-    PCC_GATEWAY_ID_PATTERN
-  );
+  var numRows = lastRow - PCC_DATA_START_ROW + 1;
+  var values = gatewaySheet.getRange(PCC_DATA_START_ROW, 1, numRows, lastCol).getValues();
 
   for (var i = 0; i < values.length; i++) {
     var rowNumber = PCC_DATA_START_ROW + i;
-    var rowObj = rowArrayToObject_(values[i], gatewayHeaderMap);
+    var rowObject = mapRowToObject_(values[i], gatewayHeaderMap);
 
-    if (isBlank_(rowObj['Raw Input'])) {
+    if (isBlank(rowObject['Raw Input'])) {
       continue;
     }
 
-    try {
-      processGatewayRow_(
-        ss,
-        gatewaySheet,
-        gatewayHeaderMap,
-        rowObj,
-        rowNumber,
-        targetContext,
-        gatewayIdState,
-        runTimestamp
-      );
-    } catch (err) {
-      logPccError(ss, 'ROW_PROCESSING_ERROR', 'Lỗi xử lý dòng gateway', {
-        sheetName: PCC_SHEET.INPUT_GATEWAY,
-        gatewayId: rowObj['Gateway ID'] || '',
-        rowNumber: rowNumber,
-        suggestedAction: String(err && err.message ? err.message : err)
-      });
+    var result = validateGatewayRowPhase1(ss, rowObject, rowNumber, context);
+    if (result.hasChanges) {
+      result.updates['Last Update'] = new Date();
+      updateGatewayRow(gatewaySheet, gatewayHeaderMap, rowNumber, result.updates);
     }
   }
 }
 
 // ---------------------------------------------------------------------------
-// Row processing
+// Core validation
 // ---------------------------------------------------------------------------
 
 /**
- * Xử lý một dòng gateway theo quy tắc Phase 1.
+ * Validate/classify một dòng gateway theo Phase 1 TEST.
  */
-function processGatewayRow_(ss, gatewaySheet, gatewayHeaderMap, rowObj, rowNumber, targetContext, gatewayIdState, runTimestamp) {
+function validateGatewayRowPhase1(ss, rowObject, rowNumber, context) {
   var updates = {};
-  var validationCodes = [];
+  var notes = [];
+  var errors = [];
 
-  // Rule 1: Gateway ID trống → tự tạo GW_0001
-  if (isBlank_(rowObj['Gateway ID'])) {
-    var newGatewayId = generateNextGatewayId(gatewayIdState);
-    updates['Gateway ID'] = newGatewayId;
-    rowObj['Gateway ID'] = newGatewayId;
-    gatewayIdState.existing[newGatewayId] = true;
-    gatewayIdState.maxNum = Math.max(gatewayIdState.maxNum, parseIdNumber_(newGatewayId));
+  // 1) Raw Input trống đã được skip từ main loop.
+
+  // 2) Gateway ID trống => tự sinh
+  var gatewayId = normalizeText(rowObject['Gateway ID']);
+  if (isBlank(gatewayId)) {
+    gatewayId = generateNextGatewayId(context.gatewayIdState);
+    updates['Gateway ID'] = gatewayId;
+    rowObject['Gateway ID'] = gatewayId;
   }
 
-  // Rule 3: Review Status trống → NEW
-  var reviewStatus = normalizeText_(rowObj['Review Status']);
-  if (!reviewStatus) {
-    reviewStatus = PCC_REVIEW_STATUS.NEW;
+  // 3) Review Status trống => NEW
+  var reviewStatus = normalizeText(rowObject['Review Status']);
+  if (isBlank(reviewStatus)) {
+    reviewStatus = PCC_VALID_REVIEW_STATUS.NEW;
     updates['Review Status'] = reviewStatus;
-    rowObj['Review Status'] = reviewStatus;
-  } else if (PCC_VALID_REVIEW_STATUSES.indexOf(reviewStatus) === -1) {
-    validationCodes.push('INVALID_REVIEW_STATUS');
-    reviewStatus = PCC_REVIEW_STATUS.NEEDS_CLARIFICATION;
+    rowObject['Review Status'] = reviewStatus;
+  }
+
+  // 4) Review Status không hợp lệ
+  if (!isValidReviewStatus_(reviewStatus)) {
+    reviewStatus = PCC_VALID_REVIEW_STATUS.NEEDS_CLARIFICATION;
     updates['Review Status'] = reviewStatus;
-    updates['Clarification Needed'] = 'Review Status không hợp lệ: ' + rowObj['Review Status'];
-    rowObj['Review Status'] = reviewStatus;
+    rowObject['Review Status'] = reviewStatus;
+    errors.push(PCC_VALIDATION_RESULT.INVALID_REVIEW_STATUS);
+    notes.push('Review Status không hợp lệ');
   }
 
-  // Rule 14: REJECTED bắt buộc có Rejected Reason
-  if (reviewStatus === PCC_REVIEW_STATUS.REJECTED) {
-    if (isBlank_(rowObj['Rejected Reason'])) {
-      validationCodes.push('REJECTED_REASON_REQUIRED');
-      updates['Validation Result'] = 'REJECTED_REASON_REQUIRED';
-    }
+  // 5) Input Type do user nhập/chọn - script chỉ validate
+  var inputType = normalizeText(rowObject['Input Type']);
+  var inputTypeValid = isValidInputType_(inputType);
+  if (!inputTypeValid) {
+    reviewStatus = PCC_VALID_REVIEW_STATUS.NEEDS_CLARIFICATION;
+    updates['Review Status'] = reviewStatus;
+    rowObject['Review Status'] = reviewStatus;
+    errors.push(PCC_VALIDATION_RESULT.INVALID_INPUT_TYPE);
+    notes.push('Input Type không hợp lệ hoặc còn trống');
   }
 
-  // Rule 4–5: Input Type
-  var inputType = normalizeText_(rowObj['Input Type']);
-  if (!inputType || PCC_INPUT_TYPES.indexOf(inputType) === -1) {
-    updates['Review Status'] = PCC_REVIEW_STATUS.NEEDS_CLARIFICATION;
-    updates['Validation Result'] = 'INVALID_INPUT_TYPE';
-    updates['Clarification Needed'] = 'Input Type không hợp lệ. Chỉ chấp nhận: ' + PCC_INPUT_TYPES.join(', ');
-    updates['Last Update'] = runTimestamp;
-    updateGatewayRow(gatewaySheet, gatewayHeaderMap, rowNumber, updates);
-    logPccError(ss, 'INVALID_INPUT_TYPE', updates['Clarification Needed'], {
-      sheetName: PCC_SHEET.INPUT_GATEWAY,
-      gatewayId: rowObj['Gateway ID'],
-      rowNumber: rowNumber,
-      fieldName: 'Input Type'
-    });
-    return;
+  // 6) Input Type hợp lệ => set Target Sheet Proposed
+  var targetSheetProposed = normalizeText(rowObject['Target Sheet Proposed']);
+  if (inputTypeValid) {
+    targetSheetProposed = PCC_INPUT_TYPE_TO_TARGET_SHEET[inputType];
+    updates['Target Sheet Proposed'] = targetSheetProposed;
+    rowObject['Target Sheet Proposed'] = targetSheetProposed;
   }
 
-  var proposedSheet = PCC_INPUT_TYPE_TO_SHEET[inputType];
-  updates['Target Sheet Proposed'] = proposedSheet;
-  rowObj['Target Sheet Proposed'] = proposedSheet;
+  // Xác định sheet hiệu lực để validate ID
+  var targetSheetApproved = normalizeText(rowObject['Target Sheet Approved']);
+  var effectiveTargetSheet = !isBlank(targetSheetApproved) ? targetSheetApproved : targetSheetProposed;
+  var effectiveTargetConfig = PCC_TARGET_ID_CONFIG[effectiveTargetSheet];
 
-  // Rule 5: Target ID Proposed trống → tạo đề xuất (nếu sheet cho phép auto-generate)
-  if (isBlank_(rowObj['Target ID Proposed'])) {
-    var generatedTargetId = generateNextTargetId(ss, proposedSheet, targetContext);
-    if (generatedTargetId.error) {
-      validationCodes.push(generatedTargetId.errorCode);
-      updates['Validation Result'] = generatedTargetId.errorCode;
-      updates['Clarification Needed'] = generatedTargetId.message;
+  if (!isBlank(effectiveTargetSheet) && !effectiveTargetConfig) {
+    reviewStatus = PCC_VALID_REVIEW_STATUS.NEEDS_CLARIFICATION;
+    updates['Review Status'] = reviewStatus;
+    rowObject['Review Status'] = reviewStatus;
+    errors.push(PCC_VALIDATION_RESULT.INVALID_TARGET_SHEET);
+    notes.push('Target Sheet không hợp lệ');
+  }
+
+  // 7) Gợi ý Target ID Proposed nếu trống (trừ DOCUMENT)
+  var targetIdProposed = normalizeText(rowObject['Target ID Proposed']);
+  if (isBlank(targetIdProposed) && effectiveTargetConfig) {
+    var suggestion = generateNextTargetIdSuggestion(ss, effectiveTargetSheet, context);
+    if (suggestion.hasSuggestion) {
+      targetIdProposed = suggestion.targetId;
+      updates['Target ID Proposed'] = targetIdProposed;
+      rowObject['Target ID Proposed'] = targetIdProposed;
     } else {
-      updates['Target ID Proposed'] = generatedTargetId.id;
-      rowObj['Target ID Proposed'] = generatedTargetId.id;
-      registerProposedIdInRun_(targetContext, proposedSheet, generatedTargetId.id, rowNumber);
+      errors.push(PCC_VALIDATION_RESULT.MISSING_TARGET_ID);
+      notes.push(suggestion.message);
     }
-  } else {
-    registerProposedIdInRun_(targetContext, proposedSheet, rowObj['Target ID Proposed'], rowNumber);
   }
 
-  // Rule 6–7: RISK / DECISION
-  var effectiveSheet = getEffectiveTargetSheet_(rowObj);
-  var riskValidation = validateRiskRequirements_(rowObj, effectiveSheet);
-  if (!riskValidation.ok) {
-    mergeValidation_(validationCodes, updates, riskValidation);
-    reviewStatus = PCC_REVIEW_STATUS.NEEDS_CLARIFICATION;
+  // Register proposed ID cho lần chạy hiện tại
+  if (!isBlank(targetIdProposed) && !isBlank(effectiveTargetSheet)) {
+    registerProposedIdInRun(context.proposedIdsInRun, effectiveTargetSheet, targetIdProposed, rowNumber);
+  }
+
+  // 8) Validate format Target ID theo sheet hiệu lực
+  if (!isBlank(targetIdProposed) && effectiveTargetConfig) {
+    if (!effectiveTargetConfig.pattern.test(targetIdProposed)) {
+      errors.push(PCC_VALIDATION_RESULT.INVALID_TARGET_ID_FORMAT);
+      notes.push('Target ID Proposed sai định dạng theo ' + effectiveTargetSheet);
+    }
+  } else if (isBlank(targetIdProposed) && effectiveTargetConfig) {
+    errors.push(PCC_VALIDATION_RESULT.MISSING_TARGET_ID);
+    notes.push('Thiếu Target ID Proposed');
+  }
+
+  // 9) Kiểm tra trùng trong sheet đích
+  if (!isBlank(targetIdProposed) && effectiveTargetConfig && effectiveTargetConfig.pattern.test(targetIdProposed)) {
+    if (checkIdExists(effectiveTargetSheet, targetIdProposed, context)) {
+      errors.push(PCC_VALIDATION_RESULT.DUPLICATE_TARGET_ID);
+      notes.push('Target ID Proposed đã tồn tại trong sheet đích');
+    }
+  }
+
+  // 10) Kiểm tra trùng giữa các dòng gateway cùng lần chạy
+  if (!isBlank(targetIdProposed) && !isBlank(effectiveTargetSheet)) {
+    if (isProposedIdDuplicateInRun(context.proposedIdsInRun, effectiveTargetSheet, targetIdProposed, rowNumber)) {
+      errors.push(PCC_VALIDATION_RESULT.DUPLICATE_TARGET_ID_IN_GATEWAY_RUN);
+      notes.push('Target ID Proposed trùng với dòng gateway khác trong lần chạy');
+    }
+  }
+
+  // 11,12) Multiple main ideas heuristic cố định
+  if (detectMultipleMainIdeas(rowObject['Raw Input'])) {
+    reviewStatus = PCC_VALID_REVIEW_STATUS.NEEDS_CLARIFICATION;
     updates['Review Status'] = reviewStatus;
-    rowObj['Review Status'] = reviewStatus;
+    rowObject['Review Status'] = reviewStatus;
+    errors.push(PCC_VALIDATION_RESULT.MULTIPLE_MAIN_IDEAS);
+    notes.push('Một dòng Gateway chỉ được đại diện cho một bản ghi đích');
   }
 
-  applyDecisionManualRules_(rowObj, updates);
-  rowObj['Transfer Mode'] = updates['Transfer Mode'] || rowObj['Transfer Mode'];
-
-  // Rule 9: Target Sheet Approved khác Proposed → validate lại theo Approved
-  if (!isBlank_(rowObj['Target Sheet Approved']) &&
-      normalizeText_(rowObj['Target Sheet Approved']) !== normalizeText_(rowObj['Target Sheet Proposed'])) {
-    effectiveSheet = normalizeText_(rowObj['Target Sheet Approved']);
-    var approvedRiskValidation = validateRiskRequirements_(rowObj, effectiveSheet);
-    if (!approvedRiskValidation.ok) {
-      mergeValidation_(validationCodes, updates, approvedRiskValidation);
-      reviewStatus = PCC_REVIEW_STATUS.NEEDS_CLARIFICATION;
+  // 13) RISK bắt buộc Risk Level + Risk Action
+  var riskApplies = (inputType === 'RISK' || targetSheetApproved === PCC_SHEET.RISK);
+  if (riskApplies) {
+    if (isBlank(rowObject['Risk Level'])) {
+      reviewStatus = PCC_VALID_REVIEW_STATUS.NEEDS_CLARIFICATION;
       updates['Review Status'] = reviewStatus;
-      rowObj['Review Status'] = reviewStatus;
+      rowObject['Review Status'] = reviewStatus;
+      errors.push(PCC_VALIDATION_RESULT.MISSING_RISK_LEVEL);
+      notes.push('Thiếu Risk Level');
     }
-    if (effectiveSheet === PCC_SHEET.DECISION_LOG) {
-      applyDecisionManualRules_(rowObj, updates);
-      rowObj['Transfer Mode'] = updates['Transfer Mode'] || rowObj['Transfer Mode'];
-    }
-  }
-
-  // Validate tổng thể (classify / gateway status – không append nếu mapping chưa đủ)
-  var validation = validateInputGatewayRow(rowObj, targetContext, {
-    reviewStatus: reviewStatus,
-    effectiveSheet: effectiveSheet,
-    rowNumber: rowNumber
-  });
-  validationCodes = validationCodes.concat(validation.codes);
-  Object.keys(validation.updates).forEach(function (key) {
-    updates[key] = validation.updates[key];
-    rowObj[key] = validation.updates[key];
-  });
-
-  if (validation.clarification) {
-    updates['Clarification Needed'] = validation.clarification;
-  }
-
-  // Rule 8: CLASSIFIED → PENDING_REVIEW khi đủ điều kiện
-  reviewStatus = normalizeText_(updates['Review Status'] || rowObj['Review Status']);
-  if (reviewStatus === PCC_REVIEW_STATUS.CLASSIFIED && validation.canMoveToPendingReview) {
-    updates['Review Status'] = PCC_REVIEW_STATUS.PENDING_REVIEW;
-    reviewStatus = PCC_REVIEW_STATUS.PENDING_REVIEW;
-    rowObj['Review Status'] = reviewStatus;
-  }
-
-  // NEW → CLASSIFIED sau khi phân loại cơ bản
-  if (reviewStatus === PCC_REVIEW_STATUS.NEW && validation.canClassify) {
-    updates['Review Status'] = PCC_REVIEW_STATUS.CLASSIFIED;
-    reviewStatus = PCC_REVIEW_STATUS.CLASSIFIED;
-    rowObj['Review Status'] = reviewStatus;
-  }
-
-  // Rule 12: đã transfer → không append lại (trừ DECISION MANUAL đang chờ xác nhận ID)
-  var decisionManualRow = isDecisionManualRow_(rowObj, effectiveSheet);
-  if (reviewStatus === PCC_REVIEW_STATUS.APPROVED_TO_TRANSFER && !decisionManualRow) {
-    if (!isBlank_(rowObj['Created Target ID']) || !isBlank_(rowObj['Transfer Date'])) {
-      updates['Validation Result'] = 'ALREADY_TRANSFERRED';
-      updates['Last Update'] = runTimestamp;
-      updateGatewayRow(gatewaySheet, gatewayHeaderMap, rowNumber, updates);
-      return;
+    if (isBlank(rowObject['Risk Action'])) {
+      reviewStatus = PCC_VALID_REVIEW_STATUS.NEEDS_CLARIFICATION;
+      updates['Review Status'] = reviewStatus;
+      rowObject['Review Status'] = reviewStatus;
+      errors.push(PCC_VALIDATION_RESULT.MISSING_RISK_ACTION);
+      notes.push('Thiếu Risk Action');
     }
   }
 
-  // Rule 13: DECISION MANUAL – xác nhận Created Target ID
-  if (decisionManualRow) {
-    var decisionResult = processDecisionManualTransfer_(ss, rowObj, targetContext, runTimestamp);
-    Object.keys(decisionResult.updates).forEach(function (key) {
-      updates[key] = decisionResult.updates[key];
-    });
-    validationCodes = validationCodes.concat(decisionResult.codes);
-    if (decisionResult.done) {
-      updates['Last Update'] = runTimestamp;
-      if (validationCodes.length > 0 && !updates['Validation Result']) {
-        updates['Validation Result'] = validationCodes[validationCodes.length - 1];
+  // 14) DECISION => Transfer Mode MANUAL
+  var decisionApplies = (inputType === 'DECISION' || targetSheetApproved === PCC_SHEET.DECISION_LOG);
+  if (decisionApplies) {
+    updates['Transfer Mode'] = PCC_TRANSFER_MODE.MANUAL;
+    rowObject['Transfer Mode'] = PCC_TRANSFER_MODE.MANUAL;
+  }
+
+  // 15) DECISION MANUAL confirm branch
+  if (targetSheetApproved === PCC_SHEET.DECISION_LOG) {
+    var createdDecisionId = normalizeText(rowObject['Created Target ID']);
+    if (!isBlank(createdDecisionId)) {
+      var decisionPattern = PCC_TARGET_ID_CONFIG[PCC_SHEET.DECISION_LOG].pattern;
+      if (!decisionPattern.test(createdDecisionId)) {
+        errors.push(PCC_VALIDATION_RESULT.INVALID_DECISION_ID);
+        notes.push('Created Target ID không đúng định dạng Decision ID');
+      } else {
+        var decisionExists = checkIdExists(PCC_SHEET.DECISION_LOG, createdDecisionId, context);
+        if (decisionExists) {
+          errors.push(PCC_VALIDATION_RESULT.DECISION_ID_CONFIRMED);
+          notes.push('Decision ID đã tồn tại trong 03_DECISION_LOG');
+        } else {
+          errors.push(PCC_VALIDATION_RESULT.DECISION_ID_NOT_FOUND);
+          notes.push('Không tìm thấy Decision ID trong 03_DECISION_LOG');
+        }
       }
-      updateGatewayRow(gatewaySheet, gatewayHeaderMap, rowNumber, updates);
-      return;
     }
   }
 
-  // Rule 10–11: APPROVED_TO_TRANSFER → append (chỉ khi mapping đủ 100%)
-  reviewStatus = normalizeText_(updates['Review Status'] || rowObj['Review Status']);
-  if (reviewStatus === PCC_REVIEW_STATUS.APPROVED_TO_TRANSFER) {
-    var transferResult = attemptAutoTransfer_(
-      ss,
-      rowObj,
-      effectiveSheet,
-      targetContext,
-      validationCodes,
-      runTimestamp,
-      rowNumber
-    );
-    Object.keys(transferResult.updates).forEach(function (key) {
-      updates[key] = transferResult.updates[key];
+  // 16) REJECTED bắt buộc có Rejected Reason
+  if (reviewStatus === PCC_VALID_REVIEW_STATUS.REJECTED) {
+    if (isBlank(rowObject['Rejected Reason'])) {
+      errors.push(PCC_VALIDATION_RESULT.REJECTED_REASON_REQUIRED);
+      notes.push('Rejected Reason là bắt buộc khi Review Status = REJECTED');
+    }
+  }
+
+  // 17) APPROVED_TO_TRANSFER trong Phase 1 TEST => luôn disable append
+  if (reviewStatus === PCC_VALID_REVIEW_STATUS.APPROVED_TO_TRANSFER) {
+    errors.push(PCC_VALIDATION_RESULT.APPROVED_BUT_APPEND_DISABLED_PHASE1);
+    notes.push('Phase 1 TEST không append sang sheet đích');
+  }
+
+  // 18,19) Chuyển trạng thái NEW/CLASSIFIED khi đủ điều kiện
+  var readiness = evaluateReadiness_(rowObject, reviewStatus, errors);
+  if (reviewStatus === PCC_VALID_REVIEW_STATUS.NEW && readiness.canClassify) {
+    updates['Review Status'] = PCC_VALID_REVIEW_STATUS.CLASSIFIED;
+    reviewStatus = PCC_VALID_REVIEW_STATUS.CLASSIFIED;
+    rowObject['Review Status'] = reviewStatus;
+  }
+
+  if (reviewStatus === PCC_VALID_REVIEW_STATUS.CLASSIFIED && readiness.canMoveToPendingReview) {
+    updates['Review Status'] = PCC_VALID_REVIEW_STATUS.PENDING_REVIEW;
+    reviewStatus = PCC_VALID_REVIEW_STATUS.PENDING_REVIEW;
+    rowObject['Review Status'] = reviewStatus;
+  }
+
+  if (readiness.mustClarify &&
+      reviewStatus !== PCC_VALID_REVIEW_STATUS.REJECTED &&
+      reviewStatus !== PCC_VALID_REVIEW_STATUS.APPROVED_TO_TRANSFER &&
+      reviewStatus !== PCC_VALID_REVIEW_STATUS.TRANSFERRED) {
+    updates['Review Status'] = PCC_VALID_REVIEW_STATUS.NEEDS_CLARIFICATION;
+    reviewStatus = PCC_VALID_REVIEW_STATUS.NEEDS_CLARIFICATION;
+    rowObject['Review Status'] = reviewStatus;
+  }
+
+  // Resolve Validation Result theo enum cố định
+  var finalValidationResult = resolveValidationResult_(errors);
+  updates['Validation Result'] = finalValidationResult;
+
+  // Clarification
+  if (finalValidationResult === PCC_VALIDATION_RESULT.VALIDATION_OK) {
+    updates['Clarification Needed'] = '';
+  } else {
+    updates['Clarification Needed'] = buildClarificationMessage_(notes);
+  }
+
+  // Log lỗi nặng
+  if (finalValidationResult === PCC_VALIDATION_RESULT.MISSING_SHEET ||
+      finalValidationResult === PCC_VALIDATION_RESULT.MISSING_HEADER) {
+    logPccError(ss, finalValidationResult, updates['Clarification Needed'], {
+      sheetName: PCC_SHEET.INPUT_GATEWAY,
+      rowNumber: rowNumber,
+      fieldName: 'Validation Result',
+      idValue: gatewayId,
+      severity: 'ERROR',
+      suggestedAction: 'Kiểm tra cấu trúc hệ thống sheet/header'
     });
-    validationCodes = validationCodes.concat(transferResult.codes);
-  } else if (validationCodes.length > 0) {
-    updates['Validation Result'] = validationCodes[validationCodes.length - 1];
-  } else if (!updates['Validation Result'] && validation.validationResult) {
-    updates['Validation Result'] = validation.validationResult;
   }
 
-  updates['Last Update'] = runTimestamp;
-  updateGatewayRow(gatewaySheet, gatewayHeaderMap, rowNumber, updates);
+  // Log các lỗi validation chính
+  if (finalValidationResult !== PCC_VALIDATION_RESULT.VALIDATION_OK &&
+      finalValidationResult !== PCC_VALIDATION_RESULT.DECISION_ID_CONFIRMED) {
+    logPccError(ss, finalValidationResult, updates['Clarification Needed'], {
+      sheetName: PCC_SHEET.INPUT_GATEWAY,
+      rowNumber: rowNumber,
+      fieldName: 'Validation Result',
+      idValue: gatewayId,
+      severity: 'WARNING',
+      suggestedAction: 'Cập nhật dữ liệu đầu vào trước khi gửi duyệt'
+    });
+  }
+
+  var filteredUpdates = filterAllowedGatewayUpdates_(updates);
+  return {
+    updates: filteredUpdates,
+    hasChanges: Object.keys(filteredUpdates).length > 0
+  };
 }
 
 // ---------------------------------------------------------------------------
-// Validation
+// Required helpers
 // ---------------------------------------------------------------------------
 
 /**
- * Validate một dòng gateway theo Phase 1.
+ * Lấy map header -> column index (1-based) từ dòng header chuẩn.
  */
-function validateInputGatewayRow(rowObj, targetContext, options) {
-  options = options || {};
-  var codes = [];
-  var updates = {};
-  var clarification = '';
-  var effectiveSheet = options.effectiveSheet || getEffectiveTargetSheet_(rowObj);
-
-  var inputType = normalizeText_(rowObj['Input Type']);
-  if (!inputType || PCC_INPUT_TYPES.indexOf(inputType) === -1) {
-    codes.push('INVALID_INPUT_TYPE');
-    return buildValidationResult_(false, false, codes, updates, 'INVALID_INPUT_TYPE', clarification);
+function getHeaderMap(sheet) {
+  if (!sheet) {
+    return null;
   }
-
-  if (!effectiveSheet || !PCC_TARGET_SHEET_CONFIG[effectiveSheet]) {
-    codes.push('INVALID_TARGET_SHEET');
-    clarification = 'Target sheet không hợp lệ: ' + effectiveSheet;
-    return buildValidationResult_(false, false, codes, updates, 'INVALID_TARGET_SHEET', clarification);
+  var lastCol = sheet.getLastColumn();
+  if (lastCol < 1) {
+    return null;
   }
-
-  if (isBlank_(rowObj['Raw Input'])) {
-    codes.push('MISSING_REQUIRED_DATA');
-    clarification = 'Thiếu Raw Input';
+  var headerValues = sheet.getRange(PCC_HEADER_ROW, 1, 1, lastCol).getValues()[0];
+  var map = {};
+  for (var i = 0; i < headerValues.length; i++) {
+    var name = normalizeText(headerValues[i]);
+    if (!isBlank(name)) {
+      map[name] = i + 1;
+    }
   }
-
-  if (!hasSingleMainIdea_(rowObj['Raw Input'])) {
-    codes.push('MULTIPLE_MAIN_IDEAS');
-    clarification = 'Một dòng chỉ được có một ý chính';
+  if (Object.keys(map).length === 0) {
+    return null;
   }
+  return map;
+}
 
-  var targetId = normalizeText_(rowObj['Target ID Proposed']);
-  var sheetConfig = PCC_TARGET_SHEET_CONFIG[effectiveSheet];
-  if (isBlank_(targetId)) {
-    codes.push('MISSING_REQUIRED_DATA');
-    clarification = clarification || 'Thiếu Target ID Proposed';
-  } else if (!isValidTargetIdFormat_(targetId, sheetConfig)) {
-    codes.push('INVALID_TARGET_ID_FORMAT');
-    clarification = 'Target ID Proposed không đúng định dạng PCC V0.2: ' + sheetConfig.idFormatHint;
-  } else if (checkIdExists(effectiveSheet, sheetConfig.idHeader, targetId, targetContext, {
-    rowNumber: options.rowNumber
-  })) {
-    codes.push('DUPLICATE_TARGET_ID');
-    clarification = 'Target ID Proposed đã tồn tại trong ' + effectiveSheet;
-  }
+/**
+ * Kiểm tra sự tồn tại các sheet bắt buộc.
+ */
+function ensureRequiredSheets(ss) {
+  var requiredSheetNames = [
+    PCC_SHEET.INPUT_GATEWAY,
+    PCC_SHEET.TASK,
+    PCC_SHEET.DOCUMENT,
+    PCC_SHEET.DECISION_LOG,
+    PCC_SHEET.NOTEBOOKLM,
+    PCC_SHEET.RISK,
+    PCC_SHEET.IDEA,
+    PCC_SHEET.ERROR_LOG
+  ];
 
-  var riskValidation = validateRiskRequirements_(rowObj, effectiveSheet);
-  if (!riskValidation.ok) {
-    codes = codes.concat(riskValidation.codes);
-    clarification = clarification || riskValidation.message;
-  }
-
-  if (inputType === 'DECISION' || effectiveSheet === PCC_SHEET.DECISION_LOG) {
-    var transferMode = normalizeText_(updates['Transfer Mode'] || rowObj['Transfer Mode']);
-    if (transferMode !== PCC_TRANSFER_MODE.MANUAL) {
-      updates['Transfer Mode'] = PCC_TRANSFER_MODE.MANUAL;
-      rowObj['Transfer Mode'] = PCC_TRANSFER_MODE.MANUAL;
+  var missingSheets = [];
+  for (var i = 0; i < requiredSheetNames.length; i++) {
+    if (!ss.getSheetByName(requiredSheetNames[i])) {
+      missingSheets.push(requiredSheetNames[i]);
     }
   }
 
-  // Kiểm tra mapping append – Phase 1 chỉ pass khi mappingComplete và header khớp 100%
-  var appendGuard = validateAppendMappingHeaders_(effectiveSheet, targetContext);
-  if (!appendGuard.ok && normalizeText_(rowObj['Review Status']) === PCC_REVIEW_STATUS.APPROVED_TO_TRANSFER) {
-    codes.push(appendGuard.errorCode);
-    clarification = clarification || appendGuard.message;
-  }
-
-  var hasBlocking = hasBlockingValidation_(codes);
-  var canClassify = !hasBlocking;
-
-  var idValid = !isBlank_(targetId) && isValidTargetIdFormat_(targetId, sheetConfig);
-  var canMoveToPendingReview = !hasBlocking &&
-    hasSingleMainIdea_(rowObj['Raw Input']) &&
-    idValid &&
-    !checkIdExists(effectiveSheet, sheetConfig.idHeader, targetId, targetContext, {
-      rowNumber: options.rowNumber
-    }) &&
-    riskValidation.ok &&
-    (inputType !== 'DECISION' || normalizeText_(rowObj['Transfer Mode']) === PCC_TRANSFER_MODE.MANUAL) &&
-    (effectiveSheet !== PCC_SHEET.DECISION_LOG || normalizeText_(rowObj['Transfer Mode']) === PCC_TRANSFER_MODE.MANUAL);
-
-  var validationResult = codes.length > 0 ? codes[codes.length - 1] : 'VALIDATION_OK';
-
-  return buildValidationResult_(canClassify, canMoveToPendingReview, codes, updates, validationResult, clarification);
-}
-
-/**
- * Kiểm tra một dòng chỉ có một ý chính.
- */
-function hasSingleMainIdea_(rawInput) {
-  if (isBlank_(rawInput)) {
+  if (missingSheets.length > 0) {
+    logPccError(ss, PCC_VALIDATION_RESULT.MISSING_SHEET, 'Thiếu sheet bắt buộc: ' + missingSheets.join(', '), {
+      sheetName: '',
+      rowNumber: '',
+      fieldName: 'Sheet',
+      idValue: '',
+      severity: 'ERROR',
+      suggestedAction: 'Tạo đủ các sheet bắt buộc theo PCC V0.3'
+    });
     return false;
   }
-
-  var text = String(rawInput).trim();
-  var bulletCount = (text.match(/^\s*[-*•]\s+/gm) || []).length;
-  if (bulletCount > 1) {
-    return false;
-  }
-
-  var numberedCount = (text.match(/^\s*\d+[\.\)]\s+/gm) || []).length;
-  if (numberedCount > 1) {
-    return false;
-  }
-
-  var lines = text.split(/\r?\n/).map(function (line) {
-    return line.trim();
-  }).filter(function (line) {
-    return line.length > 0;
-  });
-  if (lines.length > 2) {
-    return false;
-  }
-
-  var semicolonParts = text.split(';').filter(function (part) {
-    return part.trim().length > 10;
-  });
-  if (semicolonParts.length > 1) {
-    return false;
-  }
-
   return true;
 }
 
 /**
- * Validate Risk Level / Risk Action khi áp dụng cho sheet RISK.
+ * Kiểm tra đủ header bắt buộc trên một sheet.
  */
-function validateRiskRequirements_(rowObj, effectiveSheet) {
-  var applies = normalizeText_(rowObj['Input Type']) === 'RISK' || effectiveSheet === PCC_SHEET.RISK;
-  if (!applies) {
-    return { ok: true, codes: [] };
-  }
-
-  var codes = [];
-  var messages = [];
-
-  if (isBlank_(rowObj['Risk Level'])) {
-    codes.push('MISSING_RISK_LEVEL');
-    messages.push('Thiếu Risk Level');
-  }
-  if (isBlank_(rowObj['Risk Action'])) {
-    codes.push('MISSING_RISK_ACTION');
-    messages.push('Thiếu Risk Action');
-  }
-
-  if (codes.length > 0) {
-    return {
-      ok: false,
-      codes: codes,
-      message: messages.join('; '),
-      errorCode: codes.join('_AND_')
-    };
-  }
-
-  return { ok: true, codes: [] };
-}
-
-/**
- * Kiểm tra mapping append – chỉ pass khi mappingComplete và mọi cột mapping tồn tại.
- */
-function validateAppendMappingHeaders_(sheetName, targetContext) {
-  var config = PCC_TARGET_SHEET_CONFIG[sheetName];
-  if (!config) {
-    return {
-      ok: false,
-      errorCode: 'INVALID_TARGET_SHEET',
-      message: 'Không có cấu hình cho sheet: ' + sheetName
-    };
-  }
-
-  if (!config.mappingComplete || !config.appendable) {
-    return {
-      ok: false,
-      errorCode: 'MISSING_APPEND_MAPPING',
-      message: 'Chưa có mapping append đầy đủ cho ' + sheetName + ' – Phase 1 không append'
-    };
-  }
-
-  if (!config.appendFields || config.appendFields.length === 0) {
-    return {
-      ok: false,
-      errorCode: 'MISSING_APPEND_MAPPING',
-      message: 'Thiếu cấu hình append mapping cho ' + sheetName
-    };
-  }
-
-  var headerMap = targetContext.headerMaps[sheetName];
-  if (!headerMap) {
-    return {
-      ok: false,
-      errorCode: 'MISSING_TARGET_HEADER',
-      message: 'Không đọc được header của sheet ' + sheetName
-    };
-  }
-
-  var missing = [];
-
-  if (!headerMap[config.idHeader]) {
-    missing.push(config.idHeader);
-  }
-
-  config.appendFields.forEach(function (field) {
-    if (!headerMap[field.targetHeader]) {
-      missing.push(field.targetHeader);
+function ensureRequiredHeaders(ss, sheet, headerMap, requiredHeaders, sheetName) {
+  var missingHeaders = [];
+  for (var i = 0; i < requiredHeaders.length; i++) {
+    if (!headerMap[requiredHeaders[i]]) {
+      missingHeaders.push(requiredHeaders[i]);
     }
-  });
-
-  if (missing.length > 0) {
-    return {
-      ok: false,
-      errorCode: 'MISSING_TARGET_HEADER',
-      message: 'Thiếu header bắt buộc trong ' + sheetName + ': ' + unique_(missing).join(', ')
-    };
   }
-
-  return { ok: true };
-}
-
-// ---------------------------------------------------------------------------
-// Transfer
-// ---------------------------------------------------------------------------
-
-/**
- * Thử append tự động sang sheet đích khi đủ điều kiện Rule 10.
- * Phase 1: chỉ append khi mapping header đích khớp 100%.
- */
-function attemptAutoTransfer_(ss, rowObj, effectiveSheet, targetContext, existingCodes, runTimestamp, rowNumber) {
-  var updates = {};
-  var codes = existingCodes.slice();
-
-  if (!isBlank_(rowObj['Created Target ID']) || !isBlank_(rowObj['Transfer Date'])) {
-    updates['Validation Result'] = 'ALREADY_TRANSFERRED';
-    return { updates: updates, codes: codes };
-  }
-
-  var sheetConfig = PCC_TARGET_SHEET_CONFIG[effectiveSheet];
-  if (!sheetConfig) {
-    codes.push('INVALID_TARGET_SHEET');
-    updates['Validation Result'] = 'INVALID_TARGET_SHEET';
-    return { updates: updates, codes: codes };
-  }
-
-  if (effectiveSheet === PCC_SHEET.DECISION_LOG) {
-    updates['Transfer Mode'] = PCC_TRANSFER_MODE.MANUAL;
-    updates['Validation Result'] = codes.length > 0 ? codes[codes.length - 1] : 'MANUAL_DECISION_REQUIRED';
-    return { updates: updates, codes: codes };
-  }
-
-  if (!sheetConfig.mappingComplete || !sheetConfig.appendable) {
-    codes.push('MISSING_APPEND_MAPPING');
-    updates['Validation Result'] = 'MISSING_APPEND_MAPPING';
-    updates['Clarification Needed'] = 'Chưa có mapping append đầy đủ cho ' + effectiveSheet + ' – Phase 1 không append';
-    return { updates: updates, codes: codes };
-  }
-
-  if (hasBlockingValidation_(codes)) {
-    updates['Validation Result'] = codes[codes.length - 1];
-    updates['Review Status'] = PCC_REVIEW_STATUS.NEEDS_CLARIFICATION;
-    return { updates: updates, codes: codes };
-  }
-
-  var targetId = normalizeText_(rowObj['Target ID Proposed']);
-  if (!isValidTargetIdFormat_(targetId, sheetConfig)) {
-    codes.push('INVALID_TARGET_ID_FORMAT');
-    updates['Validation Result'] = 'INVALID_TARGET_ID_FORMAT';
-    updates['Clarification Needed'] = 'Định dạng ID không hợp lệ. Yêu cầu: ' + sheetConfig.idFormatHint;
-    updates['Review Status'] = PCC_REVIEW_STATUS.NEEDS_CLARIFICATION;
-    return { updates: updates, codes: codes };
-  }
-
-  if (checkIdExists(effectiveSheet, sheetConfig.idHeader, targetId, targetContext, { rowNumber: rowNumber })) {
-    codes.push('DUPLICATE_TARGET_ID');
-    updates['Validation Result'] = 'DUPLICATE_TARGET_ID';
-    updates['Review Status'] = PCC_REVIEW_STATUS.NEEDS_CLARIFICATION;
-    logPccError(ss, 'DUPLICATE_TARGET_ID', 'Không append vì ID đã tồn tại – cần làm rõ, không sửa bản ghi cũ', {
-      sheetName: effectiveSheet,
-      gatewayId: rowObj['Gateway ID'],
-      rowNumber: rowNumber,
-      fieldName: 'Target ID Proposed',
-      idValue: targetId,
-      suggestedAction: 'Chọn Target ID Proposed khác hoặc làm rõ với reviewer'
+  if (missingHeaders.length > 0) {
+    logPccError(ss, PCC_VALIDATION_RESULT.MISSING_HEADER, 'Thiếu header: ' + missingHeaders.join(', '), {
+      sheetName: sheetName || (sheet ? sheet.getName() : ''),
+      rowNumber: '',
+      fieldName: 'Header',
+      idValue: '',
+      severity: 'ERROR',
+      suggestedAction: 'Bổ sung đủ header theo đặc tả PCC'
     });
-    return { updates: updates, codes: codes };
+    return false;
   }
-
-  var appendGuard = validateAppendMappingHeaders_(effectiveSheet, targetContext);
-  if (!appendGuard.ok) {
-    codes.push(appendGuard.errorCode);
-    updates['Validation Result'] = appendGuard.errorCode;
-    updates['Clarification Needed'] = appendGuard.message;
-    logPccError(ss, appendGuard.errorCode, appendGuard.message, {
-      sheetName: effectiveSheet,
-      gatewayId: rowObj['Gateway ID'],
-      rowNumber: rowNumber,
-      suggestedAction: 'Bổ sung header mapping trước khi transfer'
-    });
-    return { updates: updates, codes: codes };
-  }
-
-  var appendResult = appendToTargetSheet(ss, effectiveSheet, rowObj, targetContext, runTimestamp);
-  if (!appendResult.ok) {
-    codes.push(appendResult.errorCode);
-    updates['Validation Result'] = appendResult.errorCode;
-    updates['Clarification Needed'] = appendResult.message;
-    updates['Review Status'] = PCC_REVIEW_STATUS.NEEDS_CLARIFICATION;
-    logPccError(ss, appendResult.errorCode, appendResult.message, {
-      sheetName: effectiveSheet,
-      gatewayId: rowObj['Gateway ID'],
-      rowNumber: rowNumber,
-      suggestedAction: 'Kiểm tra quyền ghi và header sheet đích'
-    });
-    return { updates: updates, codes: codes };
-  }
-
-  // Rule 11: sau append thành công
-  updates['Created Target ID'] = targetId;
-  updates['Transfer Date'] = runTimestamp;
-  updates['Review Status'] = PCC_REVIEW_STATUS.TRANSFERRED;
-  updates['Validation Result'] = 'TRANSFER_OK';
-  updates['Transfer Mode'] = PCC_TRANSFER_MODE.AUTO;
-
-  targetContext.idState[effectiveSheet].existing[targetId] = true;
-  targetContext.idState[effectiveSheet].maxNum = Math.max(
-    targetContext.idState[effectiveSheet].maxNum,
-    parseIdNumber_(targetId)
-  );
-  registerProposedIdInRun_(targetContext, effectiveSheet, targetId, rowNumber);
-
-  return { updates: updates, codes: codes };
+  return true;
 }
 
 /**
- * Xử lý DECISION MANUAL – Rule 13.
- */
-function processDecisionManualTransfer_(ss, rowObj, targetContext, runTimestamp) {
-  var updates = {};
-  var codes = [];
-
-  if (!isDecisionManualRow_(rowObj, getEffectiveTargetSheet_(rowObj))) {
-    return { updates: updates, codes: codes, done: false };
-  }
-
-  updates['Transfer Mode'] = PCC_TRANSFER_MODE.MANUAL;
-
-  var createdId = normalizeText_(rowObj['Created Target ID']);
-  if (isBlank_(createdId)) {
-    return { updates: updates, codes: codes, done: false };
-  }
-
-  var decisionConfig = PCC_TARGET_SHEET_CONFIG[PCC_SHEET.DECISION_LOG];
-  if (!isValidTargetIdFormat_(createdId, decisionConfig)) {
-    codes.push('INVALID_DECISION_ID');
-    updates['Validation Result'] = 'INVALID_DECISION_ID';
-    updates['Clarification Needed'] = 'Decision ID không đúng định dạng ' + decisionConfig.idFormatHint;
-    return { updates: updates, codes: codes, done: true };
-  }
-
-  if (!checkIdExists(PCC_SHEET.DECISION_LOG, decisionConfig.idHeader, createdId, targetContext)) {
-    codes.push('DECISION_ID_NOT_FOUND');
-    updates['Validation Result'] = 'DECISION_ID_NOT_FOUND';
-    return { updates: updates, codes: codes, done: true };
-  }
-
-  updates['Review Status'] = PCC_REVIEW_STATUS.TRANSFERRED;
-  updates['Transfer Date'] = runTimestamp;
-  updates['Validation Result'] = 'TRANSFER_OK';
-  return { updates: updates, codes: codes, done: true };
-}
-
-/**
- * Append một dòng mới vào sheet đích theo mapping đã khai báo.
- * Chỉ gọi khi validateAppendMappingHeaders_ đã pass.
- */
-function appendToTargetSheet(ss, sheetName, rowObj, targetContext, runTimestamp) {
-  var config = PCC_TARGET_SHEET_CONFIG[sheetName];
-  if (!config || !config.appendable || !config.mappingComplete) {
-    return {
-      ok: false,
-      errorCode: 'MISSING_APPEND_MAPPING',
-      message: 'Sheet không được append tự động trong Phase 1: ' + sheetName
-    };
-  }
-
-  var sheet = ss.getSheetByName(sheetName);
-  if (!sheet) {
-    return {
-      ok: false,
-      errorCode: 'MISSING_SHEET',
-      message: 'Không tìm thấy sheet: ' + sheetName
-    };
-  }
-
-  var headerMap = targetContext.headerMaps[sheetName];
-  var mappingGuard = validateAppendMappingHeaders_(sheetName, targetContext);
-  if (!mappingGuard.ok) {
-    return {
-      ok: false,
-      errorCode: mappingGuard.errorCode,
-      message: mappingGuard.message
-    };
-  }
-
-  var lastCol = sheet.getLastColumn();
-  var rowValues = new Array(lastCol);
-  for (var c = 0; c < lastCol; c++) {
-    rowValues[c] = '';
-  }
-
-  for (var f = 0; f < config.appendFields.length; f++) {
-    var field = config.appendFields[f];
-    var targetCol = headerMap[field.targetHeader];
-    if (!targetCol) {
-      return {
-        ok: false,
-        errorCode: 'MISSING_TARGET_HEADER',
-        message: 'Thiếu header "' + field.targetHeader + '" trong ' + sheetName
-      };
-    }
-    var value = rowObj[field.gatewayHeader];
-    rowValues[targetCol - 1] = value === undefined || value === null ? '' : value;
-  }
-
-  // Ghi Last Update nếu sheet đích có cột này (01_TASK đã xác nhận)
-  if (headerMap['Last Update']) {
-    rowValues[headerMap['Last Update'] - 1] = runTimestamp || new Date();
-  }
-
-  try {
-    var nextRow = Math.max(sheet.getLastRow() + 1, PCC_DATA_START_ROW);
-    sheet.getRange(nextRow, 1, 1, lastCol).setValues([rowValues]);
-    return { ok: true };
-  } catch (err) {
-    return {
-      ok: false,
-      errorCode: 'TARGET_WRITE_ERROR',
-      message: 'Không ghi được vào ' + sheetName + ': ' + String(err && err.message ? err.message : err)
-    };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// ID helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Sinh Gateway ID tiếp theo dạng GW_0001.
+ * Sinh Gateway ID tiếp theo theo định dạng GW_0001.
  */
 function generateNextGatewayId(gatewayIdState) {
-  gatewayIdState.maxNum += 1;
-  return formatId_(PCC_GATEWAY_ID_PREFIX, gatewayIdState.maxNum);
+  gatewayIdState.maxNumber += 1;
+  return formatSequenceId_(PCC_GATEWAY_ID_PREFIX, gatewayIdState.maxNumber);
 }
 
 /**
- * Sinh Target ID đề xuất cho sheet đích theo PCC V0.2.
+ * Sinh gợi ý Target ID Proposed theo sheet đích.
+ * DOCUMENT không được tự sinh.
  */
-function generateNextTargetId(ss, sheetName, targetContext) {
-  var config = PCC_TARGET_SHEET_CONFIG[sheetName];
+function generateNextTargetIdSuggestion(ss, targetSheetName, context) {
+  var config = PCC_TARGET_ID_CONFIG[targetSheetName];
   if (!config) {
     return {
-      error: true,
-      errorCode: 'INVALID_TARGET_SHEET',
-      message: 'Không có cấu hình ID cho sheet: ' + sheetName
+      hasSuggestion: false,
+      targetId: '',
+      message: 'Target sheet không hợp lệ'
     };
   }
 
-  if (config.canAutoGenerateId === false) {
+  if (!config.suggestable) {
     return {
-      error: true,
-      errorCode: 'MISSING_REQUIRED_DATA',
-      message: 'Target ID Proposed phải điền thủ công cho ' + sheetName +
-        ' (định dạng: ' + config.idFormatHint + ')'
+      hasSuggestion: false,
+      targetId: '',
+      message: 'Document ID cần nhập tay theo mã tài liệu dạng MF_... hoặc PC_...'
     };
   }
 
-  if (!config.idPrefix) {
+  if (!config.prefix) {
     return {
-      error: true,
-      errorCode: 'MISSING_APPEND_MAPPING',
-      message: 'Không thể tự sinh ID cho ' + sheetName + ' – thiếu cấu hình prefix'
+      hasSuggestion: false,
+      targetId: '',
+      message: 'Không có cấu hình prefix để gợi ý ID'
     };
   }
 
-  if (!targetContext.headerMaps[sheetName]) {
+  var state = context.targetIdStates[targetSheetName];
+  if (!state) {
     return {
-      error: true,
-      errorCode: 'MISSING_TARGET_HEADER',
-      message: 'Không đọc được header của sheet: ' + sheetName
+      hasSuggestion: false,
+      targetId: '',
+      message: 'Không có trạng thái ID cho target sheet'
     };
   }
 
-  if (!targetContext.headerMaps[sheetName][config.idHeader]) {
-    return {
-      error: true,
-      errorCode: 'MISSING_TARGET_HEADER',
-      message: 'Thiếu cột ID bắt buộc "' + config.idHeader + '" trong ' + sheetName
-    };
-  }
-
-  var idState = targetContext.idState[sheetName];
-  var candidate;
-  var safety = 0;
+  var loopSafety = 0;
+  var candidate = '';
   do {
-    idState.maxNum += 1;
-    candidate = formatId_(config.idPrefix, idState.maxNum);
-    safety += 1;
+    state.maxNumber += 1;
+    candidate = formatSequenceId_(config.prefix, state.maxNumber);
+    loopSafety += 1;
   } while (
-    safety < 10000 &&
-    (idState.existing[candidate] || isProposedIdTakenInRun_(targetContext, sheetName, candidate))
+    loopSafety < 10000 &&
+    (state.existing[candidate] ||
+      isProposedIdDuplicateInRun(context.proposedIdsInRun, targetSheetName, candidate, null))
   );
 
-  if (safety >= 10000) {
+  if (loopSafety >= 10000) {
     return {
-      error: true,
-      errorCode: 'INVALID_TARGET_ID_FORMAT',
-      message: 'Không tìm được Target ID trống cho ' + sheetName
+      hasSuggestion: false,
+      targetId: '',
+      message: 'Không tìm được Target ID khả dụng để gợi ý'
     };
   }
 
-  return { id: candidate };
+  return {
+    hasSuggestion: true,
+    targetId: candidate,
+    message: ''
+  };
 }
 
 /**
- * Kiểm tra ID đã tồn tại trong sheet đích chưa.
+ * Kiểm tra ID đã tồn tại trong sheet đích.
  */
-function checkIdExists(sheetName, idHeader, idValue, targetContext, options) {
-  options = options || {};
-
-  if (isBlank_(idValue)) {
+function checkIdExists(targetSheetName, idValue, context) {
+  var normalizedId = normalizeText(idValue);
+  if (isBlank(normalizedId)) {
     return false;
   }
-
-  var normalizedId = normalizeText_(idValue);
-  if (targetContext && targetContext.idState && targetContext.idState[sheetName]) {
-    if (targetContext.idState[sheetName].existing[normalizedId]) {
-      return true;
-    }
-  }
-
-  if (isProposedIdDuplicateInRun_(targetContext, sheetName, normalizedId, options.rowNumber)) {
-    return true;
-  }
-
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(sheetName);
-  if (!sheet) {
+  if (!context || !context.targetIdStates || !context.targetIdStates[targetSheetName]) {
     return false;
   }
+  return !!context.targetIdStates[targetSheetName].existing[normalizedId];
+}
 
-  var headerMap = getHeaderMap(sheet);
-  if (!headerMap || !headerMap[idHeader]) {
+/**
+ * Đăng ký Target ID Proposed trong cùng lần chạy.
+ */
+function registerProposedIdInRun(proposedIdsInRun, targetSheetName, targetId, rowNumber) {
+  var sheetName = normalizeText(targetSheetName);
+  var idValue = normalizeText(targetId);
+  if (isBlank(sheetName) || isBlank(idValue)) {
+    return;
+  }
+  if (!proposedIdsInRun[sheetName]) {
+    proposedIdsInRun[sheetName] = {};
+  }
+  if (!proposedIdsInRun[sheetName][idValue]) {
+    proposedIdsInRun[sheetName][idValue] = [];
+  }
+  proposedIdsInRun[sheetName][idValue].push(rowNumber);
+}
+
+/**
+ * Kiểm tra trùng Target ID Proposed trong cùng lần chạy.
+ * - currentRowNumber = null: chỉ kiểm tra ID đã từng xuất hiện hay chưa.
+ * - currentRowNumber có giá trị: bỏ qua chính dòng hiện tại.
+ */
+function isProposedIdDuplicateInRun(proposedIdsInRun, targetSheetName, targetId, currentRowNumber) {
+  var sheetName = normalizeText(targetSheetName);
+  var idValue = normalizeText(targetId);
+  if (isBlank(sheetName) || isBlank(idValue)) {
     return false;
   }
-
-  var col = headerMap[idHeader];
-  var lastRow = sheet.getLastRow();
-  if (lastRow < PCC_DATA_START_ROW) {
+  if (!proposedIdsInRun[sheetName] || !proposedIdsInRun[sheetName][idValue]) {
     return false;
   }
-
-  var values = sheet.getRange(PCC_DATA_START_ROW, col, lastRow - PCC_DATA_START_ROW + 1, 1).getValues();
-  for (var i = 0; i < values.length; i++) {
-    if (normalizeText_(values[i][0]) === normalizedId) {
+  var rows = proposedIdsInRun[sheetName][idValue];
+  if (currentRowNumber === null || currentRowNumber === undefined) {
+    return rows.length > 0;
+  }
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i] !== currentRowNumber) {
       return true;
     }
   }
@@ -1079,126 +762,62 @@ function checkIdExists(sheetName, idHeader, idValue, targetContext, options) {
 }
 
 /**
- * Kiểm tra định dạng ID theo PCC V0.2.
+ * Heuristic cố định để phát hiện multiple main ideas.
  */
-function isValidTargetIdFormat_(idValue, sheetConfig) {
-  if (!idValue || !sheetConfig || !sheetConfig.idPattern) {
-    return false;
-  }
-  return sheetConfig.idPattern.test(normalizeText_(idValue));
-}
-
-// ---------------------------------------------------------------------------
-// Sheet / header guards
-// ---------------------------------------------------------------------------
-
-/**
- * Kiểm tra các sheet bắt buộc có tồn tại.
- */
-function ensureRequiredSheets(ss) {
-  var required = [
-    PCC_SHEET.INPUT_GATEWAY,
-    PCC_SHEET.ERROR_LOG,
-    PCC_SHEET.TASK,
-    PCC_SHEET.DOCUMENT,
-    PCC_SHEET.DECISION_LOG,
-    PCC_SHEET.NOTEBOOKLM,
-    PCC_SHEET.RISK,
-    PCC_SHEET.IDEA
-  ];
-
-  var missing = [];
-  required.forEach(function (name) {
-    if (!ss.getSheetByName(name)) {
-      missing.push(name);
-    }
-  });
-
-  if (missing.length > 0) {
-    logPccError(ss, 'MISSING_SHEET', 'Thiếu sheet bắt buộc', {
-      suggestedAction: 'Tạo các sheet: ' + missing.join(', ')
-    });
+function detectMultipleMainIdeas(rawInputValue) {
+  var text = String(rawInputValue === null || rawInputValue === undefined ? '' : rawInputValue);
+  if (isBlank(text)) {
     return false;
   }
 
-  return true;
-}
+  // Rule A: >= 2 dòng bullet bắt đầu bằng -, *, •
+  var bulletMatches = text.match(/^\s*[-*•]\s+/gm);
+  if (bulletMatches && bulletMatches.length >= 2) {
+    return true;
+  }
 
-/**
- * Kiểm tra header bắt buộc trên một sheet.
- */
-function ensureRequiredHeaders(ss, sheet, headerMap, requiredHeaders, sheetLabel) {
-  sheetLabel = sheetLabel || sheet.getName();
-  var missing = [];
+  // Rule B: >= 2 dòng đánh số bắt đầu 1. 2. 1) 2)
+  var numberedMatches = text.match(/^\s*\d+[\.\)]\s+/gm);
+  if (numberedMatches && numberedMatches.length >= 2) {
+    return true;
+  }
 
-  requiredHeaders.forEach(function (headerName) {
-    if (!headerMap[headerName]) {
-      missing.push(headerName);
+  // Rule C: >= 2 đoạn ngăn bởi ; và mỗi đoạn > 15 ký tự
+  var parts = text.split(';');
+  var longParts = 0;
+  for (var i = 0; i < parts.length; i++) {
+    if (parts[i].trim().length > 15) {
+      longParts += 1;
     }
-  });
-
-  if (missing.length > 0) {
-    logPccError(ss, 'MISSING_HEADER', 'Thiếu header bắt buộc trong ' + sheetLabel, {
-      sheetName: sheetLabel,
-      suggestedAction: 'Bổ sung header: ' + missing.join(', ')
-    });
-    return false;
+  }
+  if (longParts >= 2) {
+    return true;
   }
 
-  return true;
+  return false;
 }
 
 /**
- * Đọc header map từ dòng 3.
- *
- * @return {Object|null} Map {HeaderName: columnIndex(1-based)}
+ * Cập nhật một dòng trong 07_INPUT_GATEWAY.
+ * Chỉ cập nhật các cột cho phép.
  */
-function getHeaderMap(sheet) {
-  if (!sheet) {
-    return null;
-  }
-
-  var lastCol = sheet.getLastColumn();
-  if (lastCol < 1) {
-    return null;
-  }
-
-  var headers = sheet.getRange(PCC_HEADER_ROW, 1, 1, lastCol).getValues()[0];
-  var map = {};
-
-  headers.forEach(function (header, index) {
-    var name = String(header || '').trim();
-    if (name) {
-      map[name] = index + 1;
+function updateGatewayRow(gatewaySheet, headerMap, rowNumber, updates) {
+  var keys = Object.keys(updates);
+  for (var i = 0; i < keys.length; i++) {
+    var header = keys[i];
+    if (!PCC_ALLOWED_GATEWAY_UPDATE_HEADERS[header]) {
+      continue;
     }
-  });
-
-  return Object.keys(map).length > 0 ? map : null;
-}
-
-// ---------------------------------------------------------------------------
-// Gateway row update / error log
-// ---------------------------------------------------------------------------
-
-/**
- * Cập nhật các cột được phép trên một dòng gateway.
- */
-function updateGatewayRow(sheet, headerMap, rowNumber, updates) {
-  if (!sheet || !headerMap || !updates) {
-    return;
-  }
-
-  Object.keys(updates).forEach(function (headerName) {
-    var col = headerMap[headerName];
+    var col = headerMap[header];
     if (!col) {
-      return;
+      continue;
     }
-    sheet.getRange(rowNumber, col).setValue(updates[headerName]);
-  });
+    gatewaySheet.getRange(rowNumber, col).setValue(updates[header]);
+  }
 }
 
 /**
- * Ghi lỗi vào PCC_ERROR_LOG (header PCC V0.2).
+ * Ghi lỗi vào PCC_ERROR_LOG.
  */
 function logPccError(ss, errorCode, message, context) {
   context = context || {};
@@ -1206,208 +825,40 @@ function logPccError(ss, errorCode, message, context) {
 
   var errorSheet = ss.getSheetByName(PCC_SHEET.ERROR_LOG);
   if (!errorSheet) {
-    Logger.log('[PCC_ERROR] ' + errorCode + ': ' + message + ' | ' + JSON.stringify(context));
+    Logger.log('[PCC_ERROR][' + errorCode + '] ' + message);
     return;
   }
 
   var headerMap = getHeaderMap(errorSheet);
   if (!headerMap) {
-    Logger.log('[PCC_ERROR] ' + errorCode + ': ' + message + ' | ' + JSON.stringify(context));
+    Logger.log('[PCC_ERROR][' + errorCode + '] ' + message);
     return;
-  }
-
-  var suggestedAction = context.suggestedAction || '';
-  if (!suggestedAction && context.details) {
-    suggestedAction = context.details;
   }
 
   var row = [];
-  PCC_ERROR_LOG_HEADERS.forEach(function (header) {
+  var maxCol = errorSheet.getLastColumn();
+  for (var i = 0; i < maxCol; i++) {
     row.push('');
-  });
+  }
 
-  setLogCell_(row, headerMap, 'Run Time', new Date());
-  setLogCell_(row, headerMap, 'Sheet Name', context.sheetName || '');
-  setLogCell_(row, headerMap, 'Row Number', context.rowNumber || '');
-  setLogCell_(row, headerMap, 'Field Name', context.fieldName || '');
-  setLogCell_(row, headerMap, 'ID Value', context.idValue || context.gatewayId || '');
-  setLogCell_(row, headerMap, 'Error Type', errorCode);
-  setLogCell_(row, headerMap, 'Severity', context.severity || 'ERROR');
-  setLogCell_(row, headerMap, 'Message', message);
-  setLogCell_(row, headerMap, 'Suggested Action', suggestedAction);
+  setByHeader_(row, headerMap, 'Run Time', new Date());
+  setByHeader_(row, headerMap, 'Sheet Name', context.sheetName || '');
+  setByHeader_(row, headerMap, 'Row Number', context.rowNumber || '');
+  setByHeader_(row, headerMap, 'Field Name', context.fieldName || '');
+  setByHeader_(row, headerMap, 'ID Value', context.idValue || context.gatewayId || '');
+  setByHeader_(row, headerMap, 'Error Type', errorCode);
+  setByHeader_(row, headerMap, 'Severity', context.severity || 'ERROR');
+  setByHeader_(row, headerMap, 'Message', message || '');
+  setByHeader_(row, headerMap, 'Suggested Action', context.suggestedAction || '');
 
   var nextRow = Math.max(errorSheet.getLastRow() + 1, PCC_DATA_START_ROW);
-  var lastCol = errorSheet.getLastColumn();
-  errorSheet.getRange(nextRow, 1, 1, lastCol).setValues([
-    row.slice(0, lastCol)
-  ]);
-}
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Cache header map và trạng thái ID cho các sheet đích.
- * Chỉ yêu cầu cột ID (idHeader) – không yêu cầu toàn bộ header append.
- */
-function buildTargetContext_(ss) {
-  var context = {
-    ok: true,
-    headerMaps: {},
-    idState: {},
-    proposedIdsInRun: {}
-  };
-
-  Object.keys(PCC_TARGET_SHEET_CONFIG).forEach(function (sheetName) {
-    var sheet = ss.getSheetByName(sheetName);
-    if (!sheet) {
-      logPccError(ss, 'MISSING_SHEET', 'Thiếu sheet đích: ' + sheetName, { sheetName: sheetName });
-      context.ok = false;
-      return;
-    }
-
-    var headerMap = getHeaderMap(sheet);
-    if (!headerMap) {
-      logPccError(ss, 'MISSING_TARGET_HEADER', 'Không đọc được header sheet ' + sheetName, { sheetName: sheetName });
-      context.ok = false;
-      return;
-    }
-
-    var config = PCC_TARGET_SHEET_CONFIG[sheetName];
-    if (!headerMap[config.idHeader]) {
-      logPccError(ss, 'MISSING_TARGET_HEADER', 'Thiếu cột ID "' + config.idHeader + '" trong ' + sheetName, {
-        sheetName: sheetName
-      });
-      context.ok = false;
-      return;
-    }
-
-    context.headerMaps[sheetName] = headerMap;
-    context.idState[sheetName] = collectExistingIds_(
-      sheet,
-      headerMap,
-      config.idHeader,
-      config.idPattern
-    );
-  });
-
-  return context;
+  errorSheet.getRange(nextRow, 1, 1, maxCol).setValues([row]);
 }
 
 /**
- * Thu thập ID hiện có và số thứ tự lớn nhất theo pattern PCC V0.2.
+ * Chuẩn hóa text.
  */
-function collectExistingIds_(sheet, headerMap, idHeader, idPattern) {
-  var state = {
-    existing: {},
-    maxNum: 0
-  };
-
-  var col = headerMap[idHeader];
-  if (!col) {
-    return state;
-  }
-
-  var lastRow = sheet.getLastRow();
-  if (lastRow < PCC_DATA_START_ROW) {
-    return state;
-  }
-
-  var values = sheet.getRange(PCC_DATA_START_ROW, col, lastRow - PCC_DATA_START_ROW + 1, 1).getValues();
-  values.forEach(function (row) {
-    var id = normalizeText_(row[0]);
-    if (!id) {
-      return;
-    }
-    state.existing[id] = true;
-    if (idPattern.test(id)) {
-      state.maxNum = Math.max(state.maxNum, parseIdNumber_(id));
-    }
-  });
-
-  return state;
-}
-
-function rowArrayToObject_(rowArray, headerMap) {
-  var obj = {};
-  Object.keys(headerMap).forEach(function (header) {
-    var colIndex = headerMap[header] - 1;
-    obj[header] = rowArray[colIndex];
-  });
-  return obj;
-}
-
-function getEffectiveTargetSheet_(rowObj) {
-  var approved = normalizeText_(rowObj['Target Sheet Approved']);
-  if (approved) {
-    return approved;
-  }
-  return normalizeText_(rowObj['Target Sheet Proposed']);
-}
-
-function isDecisionManualRow_(rowObj, effectiveSheet) {
-  return normalizeText_(rowObj['Input Type']) === 'DECISION' ||
-    effectiveSheet === PCC_SHEET.DECISION_LOG ||
-    normalizeText_(rowObj['Target Sheet Approved']) === PCC_SHEET.DECISION_LOG;
-}
-
-function applyDecisionManualRules_(rowObj, updates) {
-  if (isDecisionManualRow_(rowObj, getEffectiveTargetSheet_(rowObj))) {
-    updates['Transfer Mode'] = PCC_TRANSFER_MODE.MANUAL;
-    rowObj['Transfer Mode'] = PCC_TRANSFER_MODE.MANUAL;
-  }
-  return updates;
-}
-
-function hasBlockingValidation_(codes) {
-  for (var i = 0; i < codes.length; i++) {
-    if (PCC_BLOCKING_VALIDATION_CODES[codes[i]]) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function buildValidationResult_(canClassify, canMoveToPendingReview, codes, updates, validationResult, clarification) {
-  return {
-    canClassify: canClassify,
-    canMoveToPendingReview: canMoveToPendingReview,
-    codes: codes,
-    updates: updates,
-    validationResult: validationResult,
-    clarification: clarification
-  };
-}
-
-function mergeValidation_(validationCodes, updates, validation) {
-  if (!validation) {
-    return;
-  }
-  if (validation.codes && validation.codes.length > 0) {
-    validation.codes.forEach(function (code) {
-      validationCodes.push(code);
-    });
-  }
-  if (validation.message) {
-    updates['Clarification Needed'] = validation.message;
-  }
-  if (validation.errorCode) {
-    updates['Validation Result'] = validation.errorCode;
-  }
-}
-
-function parseIdNumber_(idValue) {
-  var match = String(idValue).match(/_(\d+)$/);
-  return match ? parseInt(match[1], 10) : 0;
-}
-
-function formatId_(prefix, number) {
-  var padded = ('0000' + number).slice(-4);
-  return prefix + padded;
-}
-
-function normalizeText_(value) {
+function normalizeText(value) {
   if (value === null || value === undefined) {
     return '';
   }
@@ -1417,75 +868,335 @@ function normalizeText_(value) {
   return String(value).trim();
 }
 
-function isBlank_(value) {
-  return normalizeText_(value) === '';
+/**
+ * Kiểm tra rỗng.
+ */
+function isBlank(value) {
+  return normalizeText(value) === '';
 }
 
-function unique_(arr) {
-  var seen = {};
-  var result = [];
-  arr.forEach(function (item) {
-    if (!seen[item]) {
-      seen[item] = true;
-      result.push(item);
+// ---------------------------------------------------------------------------
+// Internal helper utilities
+// ---------------------------------------------------------------------------
+
+/**
+ * Build context runtime:
+ * - trạng thái Gateway ID
+ * - tập ID hiện có ở các sheet đích
+ * - map proposed IDs trong lần chạy
+ */
+function buildRuntimeContext_(ss, gatewaySheet, gatewayHeaderMap) {
+  var context = {
+    ok: true,
+    gatewayIdState: {
+      maxNumber: 0
+    },
+    targetIdStates: {},
+    proposedIdsInRun: {}
+  };
+
+  // Gateway ID state từ 07_INPUT_GATEWAY
+  var gatewayIdCol = gatewayHeaderMap['Gateway ID'];
+  if (!gatewayIdCol) {
+    logPccError(ss, PCC_VALIDATION_RESULT.MISSING_HEADER, 'Thiếu header Gateway ID', {
+      sheetName: PCC_SHEET.INPUT_GATEWAY,
+      fieldName: 'Gateway ID',
+      severity: 'ERROR',
+      suggestedAction: 'Bổ sung header Gateway ID tại dòng 3'
+    });
+    context.ok = false;
+    return context;
+  }
+
+  var gatewayLastRow = gatewaySheet.getLastRow();
+  if (gatewayLastRow >= PCC_DATA_START_ROW) {
+    var gatewayIds = gatewaySheet
+      .getRange(PCC_DATA_START_ROW, gatewayIdCol, gatewayLastRow - PCC_DATA_START_ROW + 1, 1)
+      .getValues();
+    for (var i = 0; i < gatewayIds.length; i++) {
+      var gid = normalizeText(gatewayIds[i][0]);
+      if (PCC_GATEWAY_ID_PATTERN.test(gid)) {
+        context.gatewayIdState.maxNumber = Math.max(
+          context.gatewayIdState.maxNumber,
+          parseIdNumber_(gid)
+        );
+      }
     }
-  });
-  return result;
+  }
+
+  // Target ID state từ từng sheet đích
+  var targetSheetNames = [
+    PCC_SHEET.TASK,
+    PCC_SHEET.DOCUMENT,
+    PCC_SHEET.DECISION_LOG,
+    PCC_SHEET.NOTEBOOKLM,
+    PCC_SHEET.RISK,
+    PCC_SHEET.IDEA
+  ];
+
+  for (var s = 0; s < targetSheetNames.length; s++) {
+    var sheetName = targetSheetNames[s];
+    var targetSheet = ss.getSheetByName(sheetName);
+    if (!targetSheet) {
+      logPccError(ss, PCC_VALIDATION_RESULT.MISSING_SHEET, 'Thiếu sheet đích: ' + sheetName, {
+        sheetName: sheetName,
+        fieldName: 'Sheet',
+        severity: 'ERROR',
+        suggestedAction: 'Tạo sheet còn thiếu'
+      });
+      context.ok = false;
+      continue;
+    }
+
+    var targetHeaderMap = getHeaderMap(targetSheet);
+    if (!targetHeaderMap) {
+      logPccError(ss, PCC_VALIDATION_RESULT.MISSING_HEADER, 'Không đọc được header: ' + sheetName, {
+        sheetName: sheetName,
+        fieldName: 'Header',
+        severity: 'ERROR',
+        suggestedAction: 'Kiểm tra header row = 3'
+      });
+      context.ok = false;
+      continue;
+    }
+
+    var config = PCC_TARGET_ID_CONFIG[sheetName];
+    var idHeader = config.idHeader;
+    var idCol = targetHeaderMap[idHeader];
+    if (!idCol) {
+      logPccError(ss, PCC_VALIDATION_RESULT.MISSING_HEADER, 'Thiếu header ID: ' + idHeader, {
+        sheetName: sheetName,
+        fieldName: idHeader,
+        severity: 'ERROR',
+        suggestedAction: 'Bổ sung đúng tên cột ID'
+      });
+      context.ok = false;
+      continue;
+    }
+
+    var state = {
+      existing: {},
+      maxNumber: 0
+    };
+
+    var targetLastRow = targetSheet.getLastRow();
+    if (targetLastRow >= PCC_DATA_START_ROW) {
+      var idValues = targetSheet
+        .getRange(PCC_DATA_START_ROW, idCol, targetLastRow - PCC_DATA_START_ROW + 1, 1)
+        .getValues();
+      for (var r = 0; r < idValues.length; r++) {
+        var id = normalizeText(idValues[r][0]);
+        if (isBlank(id)) {
+          continue;
+        }
+        state.existing[id] = true;
+        if (config.prefix && config.pattern.test(id)) {
+          state.maxNumber = Math.max(state.maxNumber, parseIdNumber_(id));
+        }
+      }
+    }
+
+    context.targetIdStates[sheetName] = state;
+  }
+
+  return context;
 }
 
-function setLogCell_(row, headerMap, headerName, value) {
+/**
+ * Map array row -> object theo header.
+ */
+function mapRowToObject_(rowArray, headerMap) {
+  var obj = {};
+  var headers = Object.keys(headerMap);
+  for (var i = 0; i < headers.length; i++) {
+    var h = headers[i];
+    obj[h] = rowArray[headerMap[h] - 1];
+  }
+  return obj;
+}
+
+/**
+ * Kiểm tra status hợp lệ.
+ */
+function isValidReviewStatus_(value) {
+  var status = normalizeText(value);
+  for (var i = 0; i < PCC_REVIEW_STATUS_LIST.length; i++) {
+    if (PCC_REVIEW_STATUS_LIST[i] === status) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Kiểm tra input type hợp lệ.
+ */
+function isValidInputType_(value) {
+  var inputType = normalizeText(value);
+  for (var i = 0; i < PCC_INPUT_TYPE_LIST.length; i++) {
+    if (PCC_INPUT_TYPE_LIST[i] === inputType) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Đánh giá điều kiện chuyển trạng thái NEW/CLASSIFIED.
+ */
+function evaluateReadiness_(rowObject, reviewStatus, errors) {
+  var blockingCodes = {
+    INVALID_REVIEW_STATUS: true,
+    INVALID_INPUT_TYPE: true,
+    INVALID_TARGET_SHEET: true,
+    MISSING_TARGET_ID: true,
+    INVALID_TARGET_ID_FORMAT: true,
+    DUPLICATE_TARGET_ID: true,
+    DUPLICATE_TARGET_ID_IN_GATEWAY_RUN: true,
+    MULTIPLE_MAIN_IDEAS: true,
+    MISSING_RISK_LEVEL: true,
+    MISSING_RISK_ACTION: true,
+    REJECTED_REASON_REQUIRED: true,
+    INVALID_DECISION_ID: true,
+    DECISION_ID_NOT_FOUND: true,
+    MISSING_REQUIRED_DATA: true,
+    MISSING_SHEET: true,
+    MISSING_HEADER: true
+  };
+
+  var hasBlockingError = false;
+  for (var i = 0; i < errors.length; i++) {
+    if (blockingCodes[errors[i]]) {
+      hasBlockingError = true;
+      break;
+    }
+  }
+
+  var canClassify = !hasBlockingError;
+
+  var canMoveToPendingReview =
+    !hasBlockingError &&
+    reviewStatus === PCC_VALID_REVIEW_STATUS.CLASSIFIED &&
+    !isBlank(rowObject['Input Type']) &&
+    !isBlank(rowObject['Target Sheet Proposed']) &&
+    !isBlank(rowObject['Target ID Proposed']);
+
+  var mustClarify = hasBlockingError;
+
+  return {
+    canClassify: canClassify,
+    canMoveToPendingReview: canMoveToPendingReview,
+    mustClarify: mustClarify
+  };
+}
+
+/**
+ * Resolve Validation Result cuối cùng theo thứ tự ưu tiên.
+ * Không dùng giá trị ngoài enum cố định.
+ */
+function resolveValidationResult_(errors) {
+  if (!errors || errors.length === 0) {
+    return PCC_VALIDATION_RESULT.VALIDATION_OK;
+  }
+
+  var priority = [
+    PCC_VALIDATION_RESULT.MISSING_SHEET,
+    PCC_VALIDATION_RESULT.MISSING_HEADER,
+    PCC_VALIDATION_RESULT.INVALID_REVIEW_STATUS,
+    PCC_VALIDATION_RESULT.INVALID_INPUT_TYPE,
+    PCC_VALIDATION_RESULT.INVALID_TARGET_SHEET,
+    PCC_VALIDATION_RESULT.MISSING_TARGET_ID,
+    PCC_VALIDATION_RESULT.INVALID_TARGET_ID_FORMAT,
+    PCC_VALIDATION_RESULT.DUPLICATE_TARGET_ID,
+    PCC_VALIDATION_RESULT.DUPLICATE_TARGET_ID_IN_GATEWAY_RUN,
+    PCC_VALIDATION_RESULT.MULTIPLE_MAIN_IDEAS,
+    PCC_VALIDATION_RESULT.MISSING_RISK_LEVEL,
+    PCC_VALIDATION_RESULT.MISSING_RISK_ACTION,
+    PCC_VALIDATION_RESULT.REJECTED_REASON_REQUIRED,
+    PCC_VALIDATION_RESULT.INVALID_DECISION_ID,
+    PCC_VALIDATION_RESULT.DECISION_ID_NOT_FOUND,
+    PCC_VALIDATION_RESULT.DECISION_ID_CONFIRMED,
+    PCC_VALIDATION_RESULT.APPROVED_BUT_APPEND_DISABLED_PHASE1,
+    PCC_VALIDATION_RESULT.MISSING_REQUIRED_DATA
+  ];
+
+  var unique = {};
+  for (var i = 0; i < errors.length; i++) {
+    unique[errors[i]] = true;
+  }
+
+  for (var p = 0; p < priority.length; p++) {
+    if (unique[priority[p]]) {
+      return priority[p];
+    }
+  }
+
+  return PCC_VALIDATION_RESULT.VALIDATION_OK;
+}
+
+/**
+ * Tạo clarification message gọn, không rỗng.
+ */
+function buildClarificationMessage_(notes) {
+  var uniqueNotes = [];
+  var seen = {};
+  for (var i = 0; i < notes.length; i++) {
+    var note = normalizeText(notes[i]);
+    if (isBlank(note)) {
+      continue;
+    }
+    if (!seen[note]) {
+      seen[note] = true;
+      uniqueNotes.push(note);
+    }
+  }
+  if (uniqueNotes.length === 0) {
+    return 'Cần làm rõ dữ liệu đầu vào';
+  }
+  return uniqueNotes.join(' | ');
+}
+
+/**
+ * Lọc chỉ giữ lại cột được phép cập nhật trong Gateway.
+ */
+function filterAllowedGatewayUpdates_(updates) {
+  var filtered = {};
+  var keys = Object.keys(updates);
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    if (PCC_ALLOWED_GATEWAY_UPDATE_HEADERS[k]) {
+      filtered[k] = updates[k];
+    }
+  }
+  return filtered;
+}
+
+/**
+ * Set value theo header (1-based) vào row array.
+ */
+function setByHeader_(rowArray, headerMap, headerName, value) {
   var col = headerMap[headerName];
   if (!col) {
     return;
   }
-  row[col - 1] = value;
+  rowArray[col - 1] = value;
 }
 
 /**
- * Đăng ký Target ID Proposed trong lần chạy hiện tại (không ghi vào master idState).
+ * Parse phần số cuối ID dạng PREFIX_0001.
  */
-function registerProposedIdInRun_(targetContext, sheetName, idValue, rowNumber) {
-  if (!targetContext || isBlank_(idValue) || isBlank_(sheetName)) {
-    return;
+function parseIdNumber_(idValue) {
+  var match = String(idValue).match(/_(\d+)$/);
+  if (!match) {
+    return 0;
   }
-
-  if (!targetContext.proposedIdsInRun) {
-    targetContext.proposedIdsInRun = {};
-  }
-  if (!targetContext.proposedIdsInRun[sheetName]) {
-    targetContext.proposedIdsInRun[sheetName] = {};
-  }
-
-  targetContext.proposedIdsInRun[sheetName][normalizeText_(idValue)] = rowNumber;
+  return parseInt(match[1], 10);
 }
 
 /**
- * Kiểm tra ID đã được dòng gateway khác trong cùng lần chạy đăng ký chưa.
+ * Format ID sequence 4 chữ số.
  */
-function isProposedIdDuplicateInRun_(targetContext, sheetName, idValue, currentRowNumber) {
-  if (!targetContext || !targetContext.proposedIdsInRun || !targetContext.proposedIdsInRun[sheetName]) {
-    return false;
-  }
-
-  var normalizedId = normalizeText_(idValue);
-  if (!normalizedId) {
-    return false;
-  }
-
-  var ownerRow = targetContext.proposedIdsInRun[sheetName][normalizedId];
-  if (!ownerRow) {
-    return false;
-  }
-
-  return ownerRow !== currentRowNumber;
-}
-
-/**
- * Kiểm tra ID đã được đăng ký proposed trong lần chạy (bất kỳ dòng nào).
- */
-function isProposedIdTakenInRun_(targetContext, sheetName, idValue) {
-  if (!targetContext || !targetContext.proposedIdsInRun || !targetContext.proposedIdsInRun[sheetName]) {
-    return false;
-  }
-  return !!targetContext.proposedIdsInRun[sheetName][normalizeText_(idValue)];
+function formatSequenceId_(prefix, number) {
+  var padded = ('0000' + number).slice(-4);
+  return prefix + padded;
 }
