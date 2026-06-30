@@ -25,6 +25,8 @@
 var PCC_SCRIPT_NAME = 'PCC_InputGateway_Phase1_TEST';
 var PCC_HEADER_ROW = 3;
 var PCC_DATA_START_ROW = 4;
+var PCC_ERROR_LOG_HEADER_ROW = 1;
+var PCC_ERROR_LOG_DATA_START_ROW = 2;
 
 var PCC_MENU_NAME = 'PCC V0.3';
 var PCC_MENU_ITEM = 'Run Input Gateway Phase 1 TEST';
@@ -233,7 +235,7 @@ function runInputGatewayPhase1Test() {
   }
 
   var gatewaySheet = ss.getSheetByName(PCC_SHEET.INPUT_GATEWAY);
-  var gatewayHeaderMap = getHeaderMap(gatewaySheet);
+  var gatewayHeaderMap = getHeaderMap(gatewaySheet, PCC_HEADER_ROW);
   if (!gatewayHeaderMap) {
     logPccError(ss, PCC_VALIDATION_RESULT.MISSING_HEADER, 'Không đọc được header 07_INPUT_GATEWAY', {
       sheetName: PCC_SHEET.INPUT_GATEWAY,
@@ -248,7 +250,7 @@ function runInputGatewayPhase1Test() {
   }
 
   var errorSheet = ss.getSheetByName(PCC_SHEET.ERROR_LOG);
-  var errorHeaderMap = getHeaderMap(errorSheet);
+  var errorHeaderMap = getHeaderMap(errorSheet, PCC_ERROR_LOG_HEADER_ROW);
   if (!errorHeaderMap) {
     return;
   }
@@ -547,15 +549,16 @@ function validateGatewayRowPhase1(ss, rowObject, rowNumber, context) {
 /**
  * Lấy map header -> column index (1-based) từ dòng header chuẩn.
  */
-function getHeaderMap(sheet) {
+function getHeaderMap(sheet, headerRow) {
   if (!sheet) {
     return null;
   }
+  var rowNumber = headerRow || PCC_HEADER_ROW;
   var lastCol = sheet.getLastColumn();
   if (lastCol < 1) {
     return null;
   }
-  var headerValues = sheet.getRange(PCC_HEADER_ROW, 1, 1, lastCol).getValues()[0];
+  var headerValues = sheet.getRange(rowNumber, 1, 1, lastCol).getValues()[0];
   var map = {};
   for (var i = 0; i < headerValues.length; i++) {
     var name = normalizeText(headerValues[i]);
@@ -829,7 +832,7 @@ function logPccError(ss, errorCode, message, context) {
     return;
   }
 
-  var headerMap = getHeaderMap(errorSheet);
+  var headerMap = getHeaderMap(errorSheet, PCC_ERROR_LOG_HEADER_ROW);
   if (!headerMap) {
     Logger.log('[PCC_ERROR][' + errorCode + '] ' + message);
     return;
@@ -851,7 +854,7 @@ function logPccError(ss, errorCode, message, context) {
   setByHeader_(row, headerMap, 'Message', message || '');
   setByHeader_(row, headerMap, 'Suggested Action', context.suggestedAction || '');
 
-  var nextRow = Math.max(errorSheet.getLastRow() + 1, PCC_DATA_START_ROW);
+  var nextRow = Math.max(errorSheet.getLastRow() + 1, PCC_ERROR_LOG_DATA_START_ROW);
   errorSheet.getRange(nextRow, 1, 1, maxCol).setValues([row]);
 }
 
@@ -948,7 +951,7 @@ function buildRuntimeContext_(ss, gatewaySheet, gatewayHeaderMap) {
       continue;
     }
 
-    var targetHeaderMap = getHeaderMap(targetSheet);
+    var targetHeaderMap = getHeaderMap(targetSheet, PCC_HEADER_ROW);
     if (!targetHeaderMap) {
       logPccError(ss, PCC_VALIDATION_RESULT.MISSING_HEADER, 'Không đọc được header: ' + sheetName, {
         sheetName: sheetName,
