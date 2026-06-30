@@ -70,13 +70,15 @@ var PCC_GATEWAY_HEADERS = [
 ];
 
 var PCC_ERROR_LOG_HEADERS = [
-  'Timestamp',
-  'Script',
-  'Error Code',
-  'Message',
-  'Gateway ID',
+  'Run Time',
+  'Sheet Name',
   'Row Number',
-  'Details'
+  'Field Name',
+  'ID Value',
+  'Error Type',
+  'Severity',
+  'Message',
+  'Suggested Action'
 ];
 
 var PCC_INPUT_TYPES = ['TASK', 'DOCUMENT', 'DECISION', 'NOTEBOOKLM', 'RISK', 'IDEA'];
@@ -300,9 +302,10 @@ function runInputGatewayPhase1() {
       );
     } catch (err) {
       logPccError(ss, 'ROW_PROCESSING_ERROR', 'Lỗi xử lý dòng gateway', {
+        sheetName: PCC_SHEET.INPUT_GATEWAY,
         gatewayId: rowObj['Gateway ID'] || '',
         rowNumber: rowNumber,
-        details: String(err && err.message ? err.message : err)
+        suggestedAction: String(err && err.message ? err.message : err)
       });
     }
   }
@@ -359,8 +362,10 @@ function processGatewayRow_(ss, gatewaySheet, gatewayHeaderMap, rowObj, rowNumbe
     updates['Last Update'] = runTimestamp;
     updateGatewayRow(gatewaySheet, gatewayHeaderMap, rowNumber, updates);
     logPccError(ss, 'INVALID_INPUT_TYPE', updates['Clarification Needed'], {
+      sheetName: PCC_SHEET.INPUT_GATEWAY,
       gatewayId: rowObj['Gateway ID'],
-      rowNumber: rowNumber
+      rowNumber: rowNumber,
+      fieldName: 'Input Type'
     });
     return;
   }
@@ -379,12 +384,10 @@ function processGatewayRow_(ss, gatewaySheet, gatewayHeaderMap, rowObj, rowNumbe
     } else {
       updates['Target ID Proposed'] = generatedTargetId.id;
       rowObj['Target ID Proposed'] = generatedTargetId.id;
-      targetContext.idState[proposedSheet].existing[generatedTargetId.id] = true;
-      targetContext.idState[proposedSheet].maxNum = Math.max(
-        targetContext.idState[proposedSheet].maxNum,
-        parseIdNumber_(generatedTargetId.id)
-      );
+      registerProposedIdInRun_(targetContext, proposedSheet, generatedTargetId.id, rowNumber);
     }
+  } else {
+    registerProposedIdInRun_(targetContext, proposedSheet, rowObj['Target ID Proposed'], rowNumber);
   }
 
   // Rule 6–7: RISK / DECISION
@@ -420,7 +423,8 @@ function processGatewayRow_(ss, gatewaySheet, gatewayHeaderMap, rowObj, rowNumbe
   // Validate tổng thể (classify / gateway status – không append nếu mapping chưa đủ)
   var validation = validateInputGatewayRow(rowObj, targetContext, {
     reviewStatus: reviewStatus,
-    effectiveSheet: effectiveSheet
+    effectiveSheet: effectiveSheet,
+    rowNumber: rowNumber
   });
   validationCodes = validationCodes.concat(validation.codes);
   Object.keys(validation.updates).forEach(function (key) {
@@ -484,7 +488,8 @@ function processGatewayRow_(ss, gatewaySheet, gatewayHeaderMap, rowObj, rowNumbe
       effectiveSheet,
       targetContext,
       validationCodes,
-      runTimestamp
+      runTimestamp,
+      rowNumber
     );
     Object.keys(transferResult.updates).forEach(function (key) {
       updates[key] = transferResult.updates[key];
@@ -544,7 +549,9 @@ function validateInputGatewayRow(rowObj, targetContext, options) {
   } else if (!isValidTargetIdFormat_(targetId, sheetConfig)) {
     codes.push('INVALID_TARGET_ID_FORMAT');
     clarification = 'Target ID Proposed không đúng định dạng PCC V0.2: ' + sheetConfig.idFormatHint;
-  } else if (checkIdExists(effectiveSheet, sheetConfig.idHeader, targetId, targetContext)) {
+  } else if (checkIdExists(effectiveSheet, sheetConfig.idHeader, targetId, targetContext, {
+    rowNumber: options.rowNumber
+  })) {
     codes.push('DUPLICATE_TARGET_ID');
     clarification = 'Target ID Proposed đã tồn tại trong ' + effectiveSheet;
   }
@@ -577,7 +584,9 @@ function validateInputGatewayRow(rowObj, targetContext, options) {
   var canMoveToPendingReview = !hasBlocking &&
     hasSingleMainIdea_(rowObj['Raw Input']) &&
     idValid &&
-    !checkIdExists(effectiveSheet, sheetConfig.idHeader, targetId, targetContext) &&
+    !checkIdExists(effectiveSheet, sheetConfig.idHeader, targetId, targetContext, {
+      rowNumber: options.rowNumber
+    }) &&
     riskValidation.ok &&
     (inputType !== 'DECISION' || normalizeText_(rowObj['Transfer Mode']) === PCC_TRANSFER_MODE.MANUAL) &&
     (effectiveSheet !== PCC_SHEET.DECISION_LOG || normalizeText_(rowObj['Transfer Mode']) === PCC_TRANSFER_MODE.MANUAL);
@@ -727,7 +736,7 @@ function validateAppendMappingHeaders_(sheetName, targetContext) {
  * Thử append tự động sang sheet đích khi đủ điều kiện Rule 10.
  * Phase 1: chỉ append khi mapping header đích khớp 100%.
  */
-function attemptAutoTransfer_(ss, rowObj, effectiveSheet, targetContext, existingCodes, runTimestamp) {
+function attemptAutoTransfer_(ss, rowObj, effectiveSheet, targetContext, existingCodes, runTimestamp, rowNumber) {
   var updates = {};
   var codes = existingCodes.slice();
 
@@ -771,13 +780,17 @@ function attemptAutoTransfer_(ss, rowObj, effectiveSheet, targetContext, existin
     return { updates: updates, codes: codes };
   }
 
-  if (checkIdExists(effectiveSheet, sheetConfig.idHeader, targetId, targetContext)) {
+  if (checkIdExists(effectiveSheet, sheetConfig.idHeader, targetId, targetContext, { rowNumber: rowNumber })) {
     codes.push('DUPLICATE_TARGET_ID');
     updates['Validation Result'] = 'DUPLICATE_TARGET_ID';
     updates['Review Status'] = PCC_REVIEW_STATUS.NEEDS_CLARIFICATION;
     logPccError(ss, 'DUPLICATE_TARGET_ID', 'Không append vì ID đã tồn tại – cần làm rõ, không sửa bản ghi cũ', {
+      sheetName: effectiveSheet,
       gatewayId: rowObj['Gateway ID'],
-      details: targetId + ' @ ' + effectiveSheet
+      rowNumber: rowNumber,
+      fieldName: 'Target ID Proposed',
+      idValue: targetId,
+      suggestedAction: 'Chọn Target ID Proposed khác hoặc làm rõ với reviewer'
     });
     return { updates: updates, codes: codes };
   }
@@ -788,8 +801,10 @@ function attemptAutoTransfer_(ss, rowObj, effectiveSheet, targetContext, existin
     updates['Validation Result'] = appendGuard.errorCode;
     updates['Clarification Needed'] = appendGuard.message;
     logPccError(ss, appendGuard.errorCode, appendGuard.message, {
+      sheetName: effectiveSheet,
       gatewayId: rowObj['Gateway ID'],
-      details: effectiveSheet
+      rowNumber: rowNumber,
+      suggestedAction: 'Bổ sung header mapping trước khi transfer'
     });
     return { updates: updates, codes: codes };
   }
@@ -801,8 +816,10 @@ function attemptAutoTransfer_(ss, rowObj, effectiveSheet, targetContext, existin
     updates['Clarification Needed'] = appendResult.message;
     updates['Review Status'] = PCC_REVIEW_STATUS.NEEDS_CLARIFICATION;
     logPccError(ss, appendResult.errorCode, appendResult.message, {
+      sheetName: effectiveSheet,
       gatewayId: rowObj['Gateway ID'],
-      details: effectiveSheet
+      rowNumber: rowNumber,
+      suggestedAction: 'Kiểm tra quyền ghi và header sheet đích'
     });
     return { updates: updates, codes: codes };
   }
@@ -819,6 +836,7 @@ function attemptAutoTransfer_(ss, rowObj, effectiveSheet, targetContext, existin
     targetContext.idState[effectiveSheet].maxNum,
     parseIdNumber_(targetId)
   );
+  registerProposedIdInRun_(targetContext, effectiveSheet, targetId, rowNumber);
 
   return { updates: updates, codes: codes };
 }
@@ -991,21 +1009,47 @@ function generateNextTargetId(ss, sheetName, targetContext) {
   }
 
   var idState = targetContext.idState[sheetName];
-  idState.maxNum += 1;
-  return { id: formatId_(config.idPrefix, idState.maxNum) };
+  var candidate;
+  var safety = 0;
+  do {
+    idState.maxNum += 1;
+    candidate = formatId_(config.idPrefix, idState.maxNum);
+    safety += 1;
+  } while (
+    safety < 10000 &&
+    (idState.existing[candidate] || isProposedIdTakenInRun_(targetContext, sheetName, candidate))
+  );
+
+  if (safety >= 10000) {
+    return {
+      error: true,
+      errorCode: 'INVALID_TARGET_ID_FORMAT',
+      message: 'Không tìm được Target ID trống cho ' + sheetName
+    };
+  }
+
+  return { id: candidate };
 }
 
 /**
  * Kiểm tra ID đã tồn tại trong sheet đích chưa.
  */
-function checkIdExists(sheetName, idHeader, idValue, targetContext) {
+function checkIdExists(sheetName, idHeader, idValue, targetContext, options) {
+  options = options || {};
+
   if (isBlank_(idValue)) {
     return false;
   }
 
   var normalizedId = normalizeText_(idValue);
   if (targetContext && targetContext.idState && targetContext.idState[sheetName]) {
-    return !!targetContext.idState[sheetName].existing[normalizedId];
+    if (targetContext.idState[sheetName].existing[normalizedId]) {
+      return true;
+    }
+  }
+
+  if (isProposedIdDuplicateInRun_(targetContext, sheetName, normalizedId, options.rowNumber)) {
+    return true;
   }
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1072,7 +1116,7 @@ function ensureRequiredSheets(ss) {
 
   if (missing.length > 0) {
     logPccError(ss, 'MISSING_SHEET', 'Thiếu sheet bắt buộc', {
-      details: missing.join(', ')
+      suggestedAction: 'Tạo các sheet: ' + missing.join(', ')
     });
     return false;
   }
@@ -1095,7 +1139,8 @@ function ensureRequiredHeaders(ss, sheet, headerMap, requiredHeaders, sheetLabel
 
   if (missing.length > 0) {
     logPccError(ss, 'MISSING_HEADER', 'Thiếu header bắt buộc trong ' + sheetLabel, {
-      details: missing.join(', ')
+      sheetName: sheetLabel,
+      suggestedAction: 'Bổ sung header: ' + missing.join(', ')
     });
     return false;
   }
@@ -1153,7 +1198,7 @@ function updateGatewayRow(sheet, headerMap, rowNumber, updates) {
 }
 
 /**
- * Ghi lỗi vào PCC_ERROR_LOG.
+ * Ghi lỗi vào PCC_ERROR_LOG (header PCC V0.2).
  */
 function logPccError(ss, errorCode, message, context) {
   context = context || {};
@@ -1171,18 +1216,25 @@ function logPccError(ss, errorCode, message, context) {
     return;
   }
 
+  var suggestedAction = context.suggestedAction || '';
+  if (!suggestedAction && context.details) {
+    suggestedAction = context.details;
+  }
+
   var row = [];
   PCC_ERROR_LOG_HEADERS.forEach(function (header) {
     row.push('');
   });
 
-  setLogCell_(row, headerMap, 'Timestamp', new Date());
-  setLogCell_(row, headerMap, 'Script', PCC_SCRIPT_NAME);
-  setLogCell_(row, headerMap, 'Error Code', errorCode);
-  setLogCell_(row, headerMap, 'Message', message);
-  setLogCell_(row, headerMap, 'Gateway ID', context.gatewayId || '');
+  setLogCell_(row, headerMap, 'Run Time', new Date());
+  setLogCell_(row, headerMap, 'Sheet Name', context.sheetName || '');
   setLogCell_(row, headerMap, 'Row Number', context.rowNumber || '');
-  setLogCell_(row, headerMap, 'Details', context.details || context.sheetName || '');
+  setLogCell_(row, headerMap, 'Field Name', context.fieldName || '');
+  setLogCell_(row, headerMap, 'ID Value', context.idValue || context.gatewayId || '');
+  setLogCell_(row, headerMap, 'Error Type', errorCode);
+  setLogCell_(row, headerMap, 'Severity', context.severity || 'ERROR');
+  setLogCell_(row, headerMap, 'Message', message);
+  setLogCell_(row, headerMap, 'Suggested Action', suggestedAction);
 
   var nextRow = Math.max(errorSheet.getLastRow() + 1, PCC_DATA_START_ROW);
   var lastCol = errorSheet.getLastColumn();
@@ -1203,7 +1255,8 @@ function buildTargetContext_(ss) {
   var context = {
     ok: true,
     headerMaps: {},
-    idState: {}
+    idState: {},
+    proposedIdsInRun: {}
   };
 
   Object.keys(PCC_TARGET_SHEET_CONFIG).forEach(function (sheetName) {
@@ -1386,4 +1439,53 @@ function setLogCell_(row, headerMap, headerName, value) {
     return;
   }
   row[col - 1] = value;
+}
+
+/**
+ * Đăng ký Target ID Proposed trong lần chạy hiện tại (không ghi vào master idState).
+ */
+function registerProposedIdInRun_(targetContext, sheetName, idValue, rowNumber) {
+  if (!targetContext || isBlank_(idValue) || isBlank_(sheetName)) {
+    return;
+  }
+
+  if (!targetContext.proposedIdsInRun) {
+    targetContext.proposedIdsInRun = {};
+  }
+  if (!targetContext.proposedIdsInRun[sheetName]) {
+    targetContext.proposedIdsInRun[sheetName] = {};
+  }
+
+  targetContext.proposedIdsInRun[sheetName][normalizeText_(idValue)] = rowNumber;
+}
+
+/**
+ * Kiểm tra ID đã được dòng gateway khác trong cùng lần chạy đăng ký chưa.
+ */
+function isProposedIdDuplicateInRun_(targetContext, sheetName, idValue, currentRowNumber) {
+  if (!targetContext || !targetContext.proposedIdsInRun || !targetContext.proposedIdsInRun[sheetName]) {
+    return false;
+  }
+
+  var normalizedId = normalizeText_(idValue);
+  if (!normalizedId) {
+    return false;
+  }
+
+  var ownerRow = targetContext.proposedIdsInRun[sheetName][normalizedId];
+  if (!ownerRow) {
+    return false;
+  }
+
+  return ownerRow !== currentRowNumber;
+}
+
+/**
+ * Kiểm tra ID đã được đăng ký proposed trong lần chạy (bất kỳ dòng nào).
+ */
+function isProposedIdTakenInRun_(targetContext, sheetName, idValue) {
+  if (!targetContext || !targetContext.proposedIdsInRun || !targetContext.proposedIdsInRun[sheetName]) {
+    return false;
+  }
+  return !!targetContext.proposedIdsInRun[sheetName][normalizeText_(idValue)];
 }
