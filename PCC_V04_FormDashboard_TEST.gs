@@ -7,6 +7,7 @@
  *
  * NGUYÊN TẮC AN TOÀN:
  * - Giữ nguyên header/cột V0.3 hiện có (gồm Gateway ID col 1).
+ * - Sau setup: 34 header = 29 legacy V0.3 + 5 cột V0.4 append.
  * - Chỉ APPEND các cột V0.4 còn thiếu vào cuối – không ghi đè header cũ.
  * - Không đổi vị trí cột → dữ liệu row 4+ không bị lệch.
  * - Zone màu + dropdown + dashboard lookup theo TÊN header, không hardcode cột.
@@ -233,6 +234,7 @@ function pccV04_setupFormAndDashboard_TEST_ONLY() {
   var msg =
     'Đã hoàn tất Gói 1 (TEST):\n' +
     '• Giữ nguyên header/cột V0.3 (gồm Gateway ID)\n' +
+    '• Tổng 34 header (29 legacy + 5 V0.4 append)\n' +
     '• Chỉ append cột V0.4 còn thiếu\n' +
     '• Phân vùng A/B/C theo tên header\n' +
     '• Dropdown + ẩn cột kỹ thuật\n' +
@@ -510,7 +512,7 @@ function pccV04_setupDashboardFormulas_(dashboardSheet, gatewaySheet, headerMap)
     {
       label: '5. Lỗi/cần bổ sung',
       formula:
-        '=COUNTA(FILTER(' +
+        '=IFERROR(COUNTA(FILTER(' +
         colRaw +
         ',(' +
         colRaw +
@@ -520,7 +522,7 @@ function pccV04_setupDashboardFormulas_(dashboardSheet, gatewaySheet, headerMap)
         '="NEEDS_CLARIFICATION")+(REGEXMATCH(TO_TEXT(' +
         colValidation +
         '),"^BLOCKED"))' +
-        ')))',
+        '))),0)',
       note:
         'NEEDS_CLARIFICATION hoặc Validation Result bắt đầu bằng BLOCKED'
     },

@@ -23,7 +23,7 @@ Chuẩn hóa Form UX `07_INPUT_GATEWAY` và Dashboard công thức `00_DASHBOARD
 
 Sau khi chạy setup:
 
-- **TC_01–04:** Kiểm tra `07_INPUT_GATEWAY` – 33 header, vùng A trắng, vùng C xám, cột kỹ thuật ẩn
+- **TC_01–04:** Kiểm tra `07_INPUT_GATEWAY` – 34 header (29 legacy + 5 V0.4 append, gồm Gateway ID), vùng A trắng, vùng C xám, cột kỹ thuật ẩn
 - **TC_05–08:** Thử dropdown Input Type (7), Requested Action (6), Review Status (7), Target Sheet Approved (không có `00_DASHBOARD`)
 - **TC_09:** `00_DASHBOARD` hiển thị 8 chỉ số với công thức
 - **TC_10:** Không chạy transfer/append – chỉ nhập thử trên gateway, xác nhận sheet đích không đổi
