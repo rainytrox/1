@@ -480,7 +480,7 @@ function pccV04_setupDashboardFormulas_(dashboardSheet, gatewaySheet, headerMap)
   var metrics = [
     {
       label: '1. Tổng input',
-      formula: '=COUNTIF(' + colRaw + ',"<>")',
+      formula: '=COUNTIF(' + colRaw + ';"<>")',
       note: 'Đếm dòng có Raw Input'
     },
     {
@@ -488,25 +488,25 @@ function pccV04_setupDashboardFormulas_(dashboardSheet, gatewaySheet, headerMap)
       formula:
         '=COUNTIFS(' +
         colRaw +
-        ',"<>",' +
+        ';"<>";' +
         colReview +
-        ',"NEW")+COUNTIFS(' +
+        ';"NEW")+COUNTIFS(' +
         colRaw +
-        ',"<>",' +
+        ';"<>";' +
         colReview +
-        ',"CLASSIFIED")',
+        ';"CLASSIFIED")',
       note: 'Review Status = NEW hoặc CLASSIFIED'
     },
     {
       label: '3. Đang chờ duyệt',
       formula:
-        '=COUNTIFS(' + colRaw + ',"<>",' + colReview + ',"PENDING_REVIEW")',
+        '=COUNTIFS(' + colRaw + ';"<>";' + colReview + ';"PENDING_REVIEW")',
       note: 'Review Status = PENDING_REVIEW'
     },
     {
       label: '4. Đã chuyển thành công',
       formula:
-        '=COUNTIFS(' + colRaw + ',"<>",' + colReview + ',"TRANSFERRED")',
+        '=COUNTIFS(' + colRaw + ';"<>";' + colReview + ';"TRANSFERRED")',
       note: 'Review Status = TRANSFERRED'
     },
     {
@@ -514,15 +514,15 @@ function pccV04_setupDashboardFormulas_(dashboardSheet, gatewaySheet, headerMap)
       formula:
         '=IFERROR(COUNTA(FILTER(' +
         colRaw +
-        ',(' +
+        ';(' +
         colRaw +
         '<>"")*(' +
         '(' +
         colReview +
         '="NEEDS_CLARIFICATION")+(REGEXMATCH(TO_TEXT(' +
         colValidation +
-        '),"^BLOCKED"))' +
-        '))),0)',
+        ');"^BLOCKED"))' +
+        ')));0)',
       note:
         'NEEDS_CLARIFICATION hoặc Validation Result bắt đầu bằng BLOCKED'
     },
@@ -531,22 +531,22 @@ function pccV04_setupDashboardFormulas_(dashboardSheet, gatewaySheet, headerMap)
       formula:
         '=COUNTIFS(' +
         colRaw +
-        ',"<>",' +
+        ';"<>";' +
         colReview +
-        ',"PENDING_REVIEW")+COUNTIFS(' +
+        ';"PENDING_REVIEW")+COUNTIFS(' +
         colRaw +
-        ',"<>",' +
+        ';"<>";' +
         colReview +
-        ',"NEEDS_CLARIFICATION")+COUNTIFS(' +
+        ';"NEEDS_CLARIFICATION")+COUNTIFS(' +
         colRaw +
-        ',"<>",' +
+        ';"<>";' +
         colReview +
-        ',"REJECTED")',
+        ';"REJECTED")',
       note: 'PENDING_REVIEW, NEEDS_CLARIFICATION hoặc REJECTED'
     },
     {
       label: '7. Bị chặn do validation',
-      formula: '=COUNTIFS(' + colValidation + ',"BLOCKED*")',
+      formula: '=COUNTIFS(' + colValidation + ';"BLOCKED*")',
       note: 'Validation Result bắt đầu bằng BLOCKED'
     },
     {
@@ -554,11 +554,11 @@ function pccV04_setupDashboardFormulas_(dashboardSheet, gatewaySheet, headerMap)
       formula:
         '=COUNTIFS(' +
         colRaw +
-        ',"<>",' +
+        ';"<>";' +
         colInputType +
-        ',"DECISION",' +
+        ';"DECISION";' +
         colReview +
-        ',"<>TRANSFERRED")',
+        ';"<>TRANSFERRED")',
       note: 'Input Type = DECISION và Review Status khác TRANSFERRED'
     }
   ];
