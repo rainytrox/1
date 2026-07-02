@@ -1,0 +1,1641 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PCC V0.4.4b - Cổng nhập liệu</title>
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --surface: rgba(255,255,255,0.88);
+      --surface-2: rgba(255,255,255,0.72);
+      --line: #d9e2ef;
+      --line-strong: #c8d4e6;
+      --text: #172033;
+      --muted: #647084;
+      --primary: #095A91;
+      --primary-2: #074E7E;
+      --primary-soft: #EAF4FB;
+      --primary-border: #BFD9EC;
+      --primary-text: #073F66;
+      --shadow: 0 14px 34px rgba(18, 38, 63, 0.08);
+      --shadow-hover: 0 18px 42px rgba(18, 38, 63, 0.11);
+      --ok: #137333;
+      --ok-soft: #e8f6ee;
+      --danger: #b3261e;
+      --danger-soft: #fdecea;
+      --radius-xl: 22px;
+      --radius-lg: 18px;
+      --radius-md: 14px;
+      --radius-sm: 11px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: Inter, Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(91, 109, 249, 0.11), transparent 28%),
+        radial-gradient(circle at top right, rgba(47, 108, 243, 0.08), transparent 26%),
+        var(--bg);
+    }
+
+    body { font-size: 14px; }
+
+    button, input, textarea, select { font: inherit; }
+
+    .app {
+      width: min(1500px, calc(100vw - 40px));
+      margin: 0 auto;
+      padding: 18px 0 26px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 22px;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-mark {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      background: linear-gradient(135deg, var(--primary), var(--primary-2));
+      box-shadow: 0 10px 24px rgba(47,108,243,0.24);
+    }
+
+    .brand-title h1 {
+      margin: 0;
+      font-size: 21px;
+      line-height: 1.12;
+      letter-spacing: -0.03em;
+    }
+
+    .brand-title p {
+      margin: 5px 0 0;
+      font-size: 12.5px;
+      color: var(--muted);
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 40px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.78);
+      color: var(--muted);
+      font-size: 12.4px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      box-shadow: 0 6px 18px rgba(18,38,63,0.04);
+    }
+
+    .badge strong { color: var(--text); }
+
+    .badge .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #6b7280;
+      box-shadow: 0 0 0 4px rgba(107,114,128,0.14);
+      flex: 0 0 auto;
+    }
+
+    .badge.status-new .dot {
+      background: var(--primary);
+      box-shadow: 0 0 0 4px rgba(47,108,243,0.15);
+    }
+
+    .submit-main {
+      border: 0;
+      min-width: 182px;
+      height: 44px;
+      border-radius: 14px;
+      padding: 0 18px;
+      cursor: pointer;
+      color: #fff;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      background: linear-gradient(135deg, var(--primary), var(--primary-2));
+      box-shadow: 0 12px 28px rgba(47,108,243,0.24);
+    }
+
+    .submit-main:disabled { opacity: 0.62; cursor: not-allowed; box-shadow: none; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+      align-items: start;
+    }
+
+    .col-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      align-content: stretch;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid rgba(217,226,239,0.95);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      transition: box-shadow .14s ease, transform .14s ease;
+    }
+
+    .card:hover {
+      box-shadow: var(--shadow-hover);
+      transform: translateY(-1px);
+    }
+
+    .card-head {
+      padding: 16px 18px 12px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.72));
+    }
+
+    .card-head h2, .card-head h3 {
+      margin: 0;
+      font-size: 15.5px;
+      letter-spacing: -0.02em;
+    }
+
+    .card-head p {
+      margin: 5px 0 0;
+      font-size: 12.2px;
+      line-height: 1.38;
+      color: var(--muted);
+    }
+
+    .card-body {
+      padding: 16px 18px 18px;
+    }
+
+    .field { margin-bottom: 13px; }
+    .field:last-child { margin-bottom: 0; }
+
+    label {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 8px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+    }
+
+    .label-note {
+      font-size: 11.5px;
+      color: var(--muted);
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.95);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      outline: none;
+      padding: 11px 12px;
+      transition: border-color .12s, box-shadow .12s, background .12s;
+    }
+
+    input:focus, textarea:focus, select:focus {
+      border-color: rgba(47,108,243,0.75);
+      box-shadow: 0 0 0 4px rgba(47,108,243,0.12);
+      background: #fff;
+    }
+
+    textarea.raw {
+      min-height: 230px;
+      height: 250px;
+      resize: vertical;
+      line-height: 1.48;
+    }
+
+    textarea.compact {
+      min-height: 96px;
+      resize: vertical;
+      line-height: 1.42;
+    }
+
+    .status {
+      display: none;
+      margin-top: 12px;
+      padding: 12px 13px;
+      border-radius: var(--radius-md);
+      line-height: 1.45;
+      white-space: pre-wrap;
+      font-weight: 700;
+    }
+
+    .status.ok { display: block; color: var(--ok); background: var(--ok-soft); border: 1px solid rgba(19,115,51,0.18); }
+    .status.err { display: block; color: var(--danger); background: var(--danger-soft); border: 1px solid rgba(179,38,30,0.18); }
+
+    .microcopy {
+      font-size: 11.8px;
+      color: var(--muted);
+      line-height: 1.46;
+    }
+
+    .mini-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .mini-note {
+      padding: 13px 14px;
+      border-radius: var(--radius-lg);
+      background: rgba(247,249,253,0.92);
+      border: 1px solid var(--line);
+    }
+
+    .mini-note strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      letter-spacing: -0.01em;
+    }
+
+    .quick-stack {
+      display: grid;
+      gap: 14px;
+    }
+
+    .quick-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      padding: 14px;
+      background: rgba(248,250,254,0.9);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
+    }
+
+    .quick-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .quick-title {
+      font-weight: 850;
+      letter-spacing: -0.015em;
+    }
+
+    .quick-value {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(47,108,243,0.18);
+      background: var(--primary-soft);
+      color: var(--primary);
+      font-size: 11.8px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .pill {
+      min-height: 36px;
+      padding: 8px 14px;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.92);
+      color: #344154;
+      cursor: pointer;
+      font-size: 12.6px;
+      font-weight: 760;
+      transition: transform .1s, border-color .12s, background .12s, color .12s, box-shadow .12s;
+    }
+
+    .pill:hover {
+      transform: translateY(-1px);
+      border-color: rgba(47,108,243,0.34);
+      box-shadow: 0 4px 10px rgba(18,38,63,0.05);
+    }
+
+    .pill.active {
+      color: #0d4fd7;
+      background: var(--primary-soft);
+      border-color: rgba(47,108,243,0.4);
+      box-shadow: inset 0 0 0 1px rgba(47,108,243,0.06);
+    }
+
+    .more-row {
+      display: none;
+      margin-top: 10px;
+    }
+
+    .more-row.open { display: block; }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--line);
+      margin: 14px 0;
+    }
+
+    .advanced-wrap { margin-top: 18px; }
+
+    .advanced-toggle {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      background: rgba(255,255,255,0.86);
+      box-shadow: var(--shadow);
+      padding: 16px 18px;
+      color: var(--text);
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .advanced-toggle-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .advanced-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      color: var(--primary);
+      background: var(--primary-soft);
+      border: 1px solid rgba(47,108,243,0.12);
+      font-size: 18px;
+    }
+
+    .advanced-title strong {
+      display: block;
+      font-size: 14.5px;
+      letter-spacing: -0.015em;
+    }
+
+    .advanced-title span {
+      display: block;
+      margin-top: 3px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.36;
+    }
+
+    .advanced-state {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(47,108,243,0.14);
+      background: var(--primary-soft);
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .advanced {
+      display: none;
+      margin-top: 14px;
+      padding: 18px;
+      background: rgba(255,255,255,0.84);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+    }
+
+    .advanced.open { display: block; }
+
+    .advanced-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(180px, 1fr));
+      gap: 14px;
+    }
+
+    .advanced textarea { min-height: 84px; resize: vertical; }
+
+    .layout {
+      align-items: stretch;
+    }
+
+    .col-stack {
+      min-height: 642px;
+      height: 100%;
+    }
+
+    .main-card {
+      min-height: 0;
+    }
+
+    .left-col .main-card {
+      flex: 1 1 auto;
+    }
+
+    .note-card {
+      flex: 0 0 auto;
+    }
+
+    .param-col .main-card,
+    .context-col .main-card {
+      height: 100%;
+    }
+
+    .card-body {
+      display: block;
+    }
+
+    textarea.raw {
+      min-height: 188px;
+      height: 218px;
+      max-height: 340px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.97), rgba(250,252,255,0.95));
+    }
+
+    .quick-stack {
+      gap: 16px;
+    }
+
+    .quick-card {
+      padding: 16px;
+      box-shadow:
+        0 8px 20px rgba(18, 38, 63, 0.045),
+        inset 0 1px 0 rgba(255,255,255,0.72);
+    }
+
+    .quick-title-row {
+      margin-bottom: 12px;
+    }
+
+    .quick-title {
+      font-size: 13.6px;
+    }
+
+    .pills {
+      gap: 11px;
+    }
+
+    .pill {
+      min-height: 38px;
+      padding: 9px 15px;
+      background: rgba(255,255,255,0.86);
+    }
+
+    .pill.active {
+      color: #0d4fd7;
+      background: #EAF4FB;
+      border-color: rgba(47,108,243,0.48);
+      box-shadow:
+        inset 0 0 0 1px rgba(47,108,243,0.08),
+        0 5px 14px rgba(47,108,243,0.08);
+    }
+
+    .advanced-toggle {
+      border-style: solid;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.92), rgba(248,250,254,0.88));
+    }
+
+    .advanced-icon {
+      font-weight: 900;
+      font-size: 19px;
+    }
+
+    .advanced-state {
+      min-width: 138px;
+      justify-content: center;
+    }
+
+    @media (min-width: 1281px) {
+      .layout {
+        min-height: 642px;
+      }
+    }
+
+    .param-col .pills[data-field] {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .param-col .pill {
+      width: 100%;
+      min-height: 40px;
+      padding: 9px 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      white-space: nowrap;
+      font-size: 11.8px;
+      letter-spacing: -0.015em;
+    }
+
+    .param-col .quick-card {
+      padding: 15px;
+    }
+
+    .param-col .quick-title-row {
+      margin-bottom: 12px;
+    }
+
+    .param-col .more-row select {
+      min-height: 40px;
+    }
+
+    .context-col textarea.compact {
+      min-height: 132px;
+      height: 146px;
+      max-height: 190px;
+    }
+
+    .context-col .quick-card {
+      padding: 15px;
+      min-height: 130px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .context-col .quick-card .pills[data-owner] {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .context-col .quick-card .pill {
+      width: 100%;
+      min-height: 40px;
+      padding: 9px 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      white-space: nowrap;
+      font-size: 11.8px;
+    }
+
+    .quick-actions button[data-tip]::after,
+    .top-actions button[data-tip]::after,
+    header button[data-tip]::after {
+      top: calc(100% + 9px);
+      bottom: auto;
+      transform: translateX(-50%) translateY(-4px);
+    }
+
+    .quick-actions button[data-tip]::before,
+    .top-actions button[data-tip]::before,
+    header button[data-tip]::before {
+      top: calc(100% + 3px);
+      bottom: auto;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 0;
+      border-bottom: 6px solid rgba(23, 32, 51, 0.94);
+      transform: translateX(-50%) translateY(-4px);
+    }
+
+    .quick-actions button[data-tip]:hover::after,
+    .quick-actions button[data-tip]:focus-visible::after,
+    .quick-actions button[data-tip]:hover::before,
+    .quick-actions button[data-tip]:focus-visible::before,
+    .top-actions button[data-tip]:hover::after,
+    .top-actions button[data-tip]:focus-visible::after,
+    .top-actions button[data-tip]:hover::before,
+    .top-actions button[data-tip]:focus-visible::before,
+    header button[data-tip]:hover::after,
+    header button[data-tip]:focus-visible::after,
+    header button[data-tip]:hover::before,
+    header button[data-tip]:focus-visible::before {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    @media (max-width: 760px) {
+      .param-col .pills[data-field],
+      .context-col .quick-card .pills[data-owner] {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    .submit-group.fixed-actions {
+      display: grid;
+      grid-template-columns: repeat(8, 96px);
+      gap: 8px;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    .action-btn {
+      border: 1px solid var(--line-strong);
+      height: 42px;
+      border-radius: 14px;
+      padding: 0 10px;
+      cursor: pointer;
+      color: #23406d;
+      font-weight: 850;
+      letter-spacing: -0.015em;
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 8px 20px rgba(18, 38, 63, 0.055);
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .action-btn.primary {
+      border: 0;
+      color: #fff;
+      background: linear-gradient(135deg, var(--primary), var(--primary-2));
+      box-shadow: 0 12px 28px rgba(47,108,243,0.22);
+    }
+
+    .action-btn.warn {
+      background: rgba(255,255,255,0.88);
+      border-color: rgba(47,108,243,0.22);
+      color: #1f3b6d;
+    }
+
+    .action-btn:disabled {
+      opacity: .62;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .action-btn.is-loading::after {
+      content: "";
+      width: 13px;
+      height: 13px;
+      margin-left: 6px;
+      border: 2px solid rgba(37, 99, 235, .35);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      display: inline-block;
+      vertical-align: -2px;
+      animation: spin .75s linear infinite;
+    }
+
+    .action-btn.primary.is-loading::after {
+      border-color: rgba(255,255,255,.55);
+      border-top-color: #fff;
+    }
+
+    #btnDashboard.dashboard-nav-btn {
+      background: #10B981;
+      border-color: #10B981;
+      color: #ffffff;
+      box-shadow: 0 10px 24px rgba(16, 185, 129, 0.22);
+    }
+
+    #btnDashboard.dashboard-nav-btn:hover {
+      background: #059669;
+      border-color: #059669;
+      color: #ffffff;
+      transform: none;
+    }
+
+    @media (min-width: 1200px) {
+      .top-actions {
+        flex-wrap: nowrap;
+        gap: 8px;
+      }
+
+      .submit-group.fixed-actions {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 8px;
+      }
+
+      .badge {
+        white-space: nowrap;
+        padding-left: 12px;
+        padding-right: 12px;
+      }
+
+      .badge span {
+        white-space: nowrap;
+      }
+
+      .submit-group.fixed-actions .action-btn {
+        min-width: auto;
+        padding-left: 14px;
+        padding-right: 14px;
+      }
+    }
+
+    @media (max-width: 1280px) {
+      .submit-group.fixed-actions {
+        grid-template-columns: repeat(4, 96px);
+      }
+    }
+
+    @media (max-width: 760px) {
+      .submit-group.fixed-actions {
+        width: 100%;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .action-btn {
+        width: 100%;
+      }
+    }
+
+    .toast {
+      position: fixed;
+      top: 78px;
+      right: 24px;
+      z-index: 1000;
+      max-width: 360px;
+      padding: 13px 15px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 18px 42px rgba(18, 38, 63, 0.16);
+      color: var(--text);
+      font-weight: 750;
+      line-height: 1.42;
+      transform: translateY(-10px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease, transform .18s ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+
+    .toast.ok {
+      border-color: rgba(19, 115, 51, 0.22);
+      background: rgba(232, 246, 238, 0.98);
+      color: var(--ok);
+    }
+
+    .toast.err {
+      border-color: rgba(179, 38, 30, 0.22);
+      background: rgba(253, 236, 234, 0.98);
+      color: var(--danger);
+    }
+
+    .field-error-text {
+      display: none;
+      margin-top: 7px;
+      color: var(--danger);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .field.has-error textarea,
+    .field.has-error input,
+    .field.has-error select {
+      border-color: rgba(179, 38, 30, 0.76);
+      box-shadow: 0 0 0 4px rgba(179, 38, 30, 0.10);
+      background: #fffafa;
+    }
+
+    .field.has-error .field-error-text {
+      display: block;
+    }
+
+    .submit-main.is-loading {
+      position: relative;
+      opacity: .84;
+    }
+
+    .submit-main.is-loading::after {
+      content: "";
+      width: 14px;
+      height: 14px;
+      margin-left: 8px;
+      border: 2px solid rgba(255,255,255,.55);
+      border-top-color: #fff;
+      border-radius: 50%;
+      display: inline-block;
+      vertical-align: -2px;
+      animation: spin .75s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .submit-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .submit-secondary {
+      border: 1px solid var(--line-strong);
+      min-width: 168px;
+      height: 44px;
+      border-radius: 14px;
+      padding: 0 16px;
+      cursor: pointer;
+      color: #23406d;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      background: rgba(255, 255, 255, 0.88);
+      box-shadow: 0 8px 20px rgba(18, 38, 63, 0.06);
+    }
+
+    .submit-secondary:disabled,
+    .submit-main:disabled {
+      opacity: 0.62;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .submit-secondary.is-loading,
+    .submit-main.is-loading {
+      position: relative;
+      opacity: .84;
+    }
+
+    .submit-secondary.is-loading::after,
+    .submit-main.is-loading::after {
+      content: "";
+      width: 14px;
+      height: 14px;
+      margin-left: 8px;
+      border: 2px solid rgba(37, 99, 235, .35);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      display: inline-block;
+      vertical-align: -2px;
+      animation: spin .75s linear infinite;
+    }
+
+    .submit-main.is-loading::after {
+      border-color: rgba(255,255,255,.55);
+      border-top-color: #fff;
+    }
+
+    @media (max-width: 760px) {
+      .submit-group {
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .submit-secondary,
+      .submit-main {
+        width: 100%;
+      }
+    }
+
+    .card,
+    .quick-card,
+    .pills,
+    .submit-group,
+    .top-actions,
+    .advanced-wrap {
+      overflow: visible;
+    }
+
+    button[data-tip] {
+      position: relative;
+    }
+
+    button[data-tip]::after {
+      content: attr(data-tip);
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 9px);
+      transform: translateX(-50%) translateY(4px);
+      z-index: 9999;
+      min-width: max-content;
+      max-width: 220px;
+      padding: 7px 10px;
+      border-radius: 10px;
+      background: rgba(23, 32, 51, 0.94);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 750;
+      line-height: 1.25;
+      letter-spacing: 0;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      visibility: hidden;
+      box-shadow: 0 10px 24px rgba(18, 38, 63, 0.18);
+      transition: opacity .12s ease, transform .12s ease, visibility .12s ease;
+    }
+
+    button[data-tip]::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 3px);
+      transform: translateX(-50%) translateY(4px);
+      z-index: 9998;
+      width: 0;
+      height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 6px solid rgba(23, 32, 51, 0.94);
+      pointer-events: none;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity .12s ease, transform .12s ease, visibility .12s ease;
+    }
+
+    button[data-tip]:hover::after,
+    button[data-tip]:focus-visible::after,
+    button[data-tip]:hover::before,
+    button[data-tip]:focus-visible::before {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    @media (max-width: 760px) {
+      button[data-tip]::after,
+      button[data-tip]::before {
+        display: none;
+      }
+
+      .toast {
+        left: 12px;
+        right: 12px;
+        max-width: none;
+        top: 12px;
+      }
+    }
+
+    @media (max-width: 1280px) {
+      .layout {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .col-stack.context-col {
+        grid-column: 1 / -1;
+      }
+
+      .advanced-grid {
+        grid-template-columns: repeat(2, minmax(180px, 1fr));
+      }
+    }
+
+    @media (max-width: 760px) {
+      .app { width: min(100vw - 22px, 760px); padding-top: 10px; }
+      .topbar { grid-template-columns: 1fr; }
+      .top-actions { justify-content: stretch; }
+      .layout, .two-col, .advanced-grid { grid-template-columns: 1fr; }
+      .submit-main { width: 100%; }
+      textarea.raw { height: 210px; }
+      .advanced-toggle { align-items: flex-start; }
+      .advanced-state { margin-left: 50px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">AI</div>
+        <div class="brand-title">
+          <h1>Cổng nhập liệu PCC</h1>
+          <p>Nhà máy Marketing AI - Gateway-first - Fixed Quick Actions - Tooltip tiếng Việt - Primary Blue #095A91</p>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <div class="badge">
+          <span class="dot"></span>
+          <span><strong>GW</strong> · 07_INPUT</span>
+        </div>
+        <div class="badge status-new">
+          <span class="dot"></span>
+          <span><strong>Status</strong> · NEW</span>
+        </div>
+        <div class="submit-group fixed-actions">
+          <button type="button"
+                  id="btnDashboard"
+                  class="action-btn dashboard-nav-btn"
+                  onclick="window.top.location.href='<?= webAppUrl ?>?page=dashboard'"
+                  data-tip="Trang chính"
+                  title="Trang chính">DASHBOARD</button>
+          <button id="btnGateway" class="action-btn primary" onclick="submitQuick('GATEWAY')" data-tip="Chỉ nhập Gateway" title="Chỉ nhập Gateway">GATEWAY</button>
+          <button id="btnTask" class="action-btn" onclick="submitQuick('TASK')" data-tip="Tạo công việc" title="Tạo công việc">TASK</button>
+          <button id="btnDoc" class="action-btn" onclick="submitQuick('DOC')" data-tip="Đăng ký tài liệu" title="Đăng ký tài liệu">DOC</button>
+          <button id="btnRisk" class="action-btn" onclick="submitQuick('RISK')" data-tip="Ghi rủi ro" title="Ghi rủi ro">RISK</button>
+          <button id="btnIdea" class="action-btn" onclick="submitQuick('IDEA')" data-tip="Ghi ý tưởng" title="Ghi ý tưởng">IDEA</button>
+          <button id="btnDecision" class="action-btn warn" onclick="submitQuick('DECISION')" data-tip="Chờ ghi quyết định" title="Chờ ghi quyết định">DECISION</button>
+          <button id="btnKb" class="action-btn warn" onclick="submitQuick('KB')" data-tip="Chờ cập nhật tri thức" title="Chờ cập nhật tri thức">KB</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <div class="col-stack left-col">
+        <section class="card main-card">
+          <div class="card-head">
+            <h2>01 - Nội dung mới / Raw Input</h2>
+            <p>Nhập nội dung cần ghi nhận. Dữ liệu chỉ vào 07_INPUT_GATEWAY để chờ rà soát, không ghi thẳng vào sheet lõi.</p>
+          </div>
+          <div class="card-body">
+            <div class="field">
+              <label for="rawInput">
+                <span>Nội dung mới / Raw Input *</span>
+                <span class="label-note">Required</span>
+              </label>
+              <textarea id="rawInput" class="raw" placeholder="Ví dụ / Example: Tạo task mới kiểm tra dashboard PCC V0.4.1..."></textarea>
+              <div class="field-error-text">Vui lòng nhập nội dung mới / Please enter raw input.</div>
+            </div>
+            <div id="statusBox" class="status"></div>
+          </div>
+        </section>
+
+        <section class="card note-card">
+          <div class="card-head">
+            <h3>Ghi chú vận hành / Operating Notes</h3>
+            <p>Vài nguyên tắc ngắn để người dùng thao tác nhanh và đúng.</p>
+          </div>
+          <div class="card-body mini-grid">
+            <div class="mini-note">
+              <strong>Nhập ngắn, rõ / Keep it concise</strong>
+              <div class="microcopy">1-3 câu rõ mục tiêu là đủ. Thông tin thiếu có thể bổ sung ở phần Nâng cao / Advanced.</div>
+            </div>
+            <div class="mini-note">
+              <strong>Không tự chuyển sheet / No auto transfer</strong>
+              <div class="microcopy">Gửi Gateway chỉ ghi vào 07_INPUT_GATEWAY. Gửi & tạo Task sẽ ghi Gateway trước, sau đó tạo task có kiểm soát trong 01_TASK.</div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="col-stack param-col">
+        <section class="card main-card">
+          <div class="card-head">
+            <h2>02 - Thông số chính / Main Parameters</h2>
+            <p>Các lựa chọn dùng nhiều được hiển thị sẵn. Phần còn lại nằm trong Khác… / More….</p>
+          </div>
+          <div class="card-body">
+            <div class="quick-stack">
+              <div class="quick-card">
+                <div class="quick-title-row">
+                  <span class="quick-title">Loại dữ liệu / Input Type</span>
+                </div>
+                <div class="pills" data-field="inputType">
+                  <button class="pill active" data-value="TASK" data-tip="Công việc" title="Công việc">TASK</button>
+                  <button class="pill" data-value="DOCUMENT" data-tip="Tài liệu" title="Tài liệu">DOCUMENT</button>
+                  <button class="pill" data-value="RISK" data-tip="Rủi ro" title="Rủi ro">RISK</button>
+                  <button class="pill" data-value="IDEA" data-tip="Ý tưởng" title="Ý tưởng">IDEA</button>
+                  <button class="pill" data-more="inputTypeMore" data-tip="Thêm lựa chọn" title="Thêm lựa chọn">MORE</button>
+                </div>
+                <div id="inputTypeMore" class="more-row">
+                  <select id="inputTypeSelect" onchange="setField('inputType', this.value)">
+                    <option value="TASK">TASK</option>
+                    <option value="DOCUMENT">DOCUMENT</option>
+                    <option value="NOTEBOOKLM">NotebookLM / NOTEBOOKLM</option>
+                    <option value="RISK">RISK</option>
+                    <option value="IDEA">IDEA</option>
+                    <option value="DECISION">Quyết định / DECISION</option>
+                    <option value="UNKNOWN">Chưa rõ / UNKNOWN</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="quick-card">
+                <div class="quick-title-row">
+                  <span class="quick-title">Hành động / Action</span>
+                </div>
+                <div class="pills" data-field="requestedAction">
+                  <button class="pill active" data-value="CREATE_NEW" data-tip="Tạo mới" title="Tạo mới">CREATE_NEW</button>
+                  <button class="pill" data-value="REVIEW_ONLY" data-tip="Chỉ rà soát" title="Chỉ rà soát">REVIEW_ONLY</button>
+                  <button class="pill" data-value="REGISTER_SOURCE" data-tip="Đăng ký nguồn" title="Đăng ký nguồn">REGISTER_SOURCE</button>
+                  <button class="pill" data-value="CLASSIFY_FOR_ME" data-tip="Nhờ phân loại" title="Nhờ phân loại">CLASSIFY</button>
+                  <button class="pill" data-more="actionMore" data-tip="Thêm lựa chọn" title="Thêm lựa chọn">MORE</button>
+                </div>
+                <div id="actionMore" class="more-row">
+                  <select id="requestedActionSelect" onchange="setField('requestedAction', this.value)">
+                    <option value="CREATE_NEW">CREATE_NEW</option>
+                    <option value="REVIEW_ONLY">Chỉ rà soát / REVIEW_ONLY</option>
+                    <option value="REGISTER_SOURCE">Ghi nhận nguồn / REGISTER_SOURCE</option>
+                    <option value="MANUAL_DECISION_LOG">Ghi quyết định tay / MANUAL_DECISION_LOG</option>
+                    <option value="CLASSIFY_FOR_ME">Phân loại giúp / CLASSIFY_FOR_ME</option>
+                    <option value="UPDATE_EXISTING">Cập nhật bản ghi cũ / UPDATE_EXISTING</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="quick-card">
+                <div class="quick-title-row">
+                  <span class="quick-title">Mức ưu tiên / Priority</span>
+                </div>
+                <div class="pills" data-field="priority">
+                  <button class="pill" data-value="Low" data-tip="Thấp" title="Thấp">Low</button>
+                  <button class="pill active" data-value="Medium" data-tip="Trung bình" title="Trung bình">Medium</button>
+                  <button class="pill" data-value="High" data-tip="Cao" title="Cao">High</button>
+                  <button class="pill" data-value="Critical" data-tip="Khẩn cấp" title="Khẩn cấp">Critical</button>
+                </div>
+              </div>
+
+              <div class="quick-card">
+                <div class="quick-title-row">
+                  <span class="quick-title">Nguồn dữ liệu / Source Type</span>
+                </div>
+                <div class="pills" data-field="sourceType">
+                  <button class="pill active" data-value="MANUAL_INPUT" data-tip="Nhập tay" title="Nhập tay">MANUAL</button>
+                  <button class="pill" data-value="CHATGPT" data-tip="Từ ChatGPT" title="Từ ChatGPT">ChatGPT</button>
+                  <button class="pill" data-value="GOOGLE_DRIVE" data-tip="Từ Google Drive" title="Từ Google Drive">DRIVE</button>
+                  <button class="pill" data-value="ZALO" data-tip="Từ Zalo" title="Từ Zalo">ZALO</button>
+                  <button class="pill" data-more="sourceMore" data-tip="Thêm nguồn" title="Thêm nguồn">MORE</button>
+                </div>
+                <div id="sourceMore" class="more-row">
+                  <select id="sourceTypeSelect" onchange="setField('sourceType', this.value)">
+                    <option value="MANUAL_INPUT">Nhập tay / MANUAL_INPUT</option>
+                    <option value="CHATGPT">ChatGPT</option>
+                    <option value="CLAUDE">Claude</option>
+                    <option value="CURSOR">Cursor</option>
+                    <option value="GOOGLE_DRIVE">Google Drive</option>
+                    <option value="NOTEBOOKLM">NotebookLM</option>
+                    <option value="GOOGLE_SHEET">Google Sheet</option>
+                    <option value="GOOGLE_DOC">Google Doc</option>
+                    <option value="EMAIL">Email</option>
+                    <option value="ZALO">ZALO</option>
+                    <option value="OTHER">Khác / OTHER</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="col-stack context-col">
+        <section class="card main-card">
+          <div class="card-head">
+            <h2>03 - Ngữ cảnh xử lý / Context</h2>
+            <p>Thông tin giúp rà soát, phân công và truy nguồn nhanh hơn.</p>
+          </div>
+          <div class="card-body">
+            <div class="two-col">
+              <div class="field">
+                <label for="inputBy"><span>Người nhập / Input By</span></label>
+                <input id="inputBy" value="Lâm / AIA_01">
+              </div>
+              <div class="field">
+                <label for="owner"><span>Phụ trách / Owner</span></label>
+                <input id="owner" value="Lâm / AIA_01">
+              </div>
+            </div>
+
+            <div class="two-col">
+              <div class="field">
+                <label for="dueDate"><span>Hạn xử lý / Due Date</span></label>
+                <input id="dueDate" type="date">
+              </div>
+              <div class="field">
+                <label for="sourceLink"><span>Link nguồn / Source Link</span></label>
+                <input id="sourceLink" placeholder="https://...">
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="remark"><span>Ghi chú / Remark</span></label>
+              <textarea id="remark" class="compact" placeholder="Ghi chú ngắn nếu cần / Optional note"></textarea>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="quick-card">
+              <div class="quick-title-row">
+                <span class="quick-title">Gợi ý phân công nhanh / Quick Assignment</span>
+              </div>
+              <div class="pills" data-owner>
+                <button class="pill active" data-owner-value="Lâm / AIA_01" data-tip="Người quyết định" title="Người quyết định">Lâm / AIA_01</button>
+                <button class="pill" data-owner-value="Claude" data-tip="Phản biện" title="Phản biện">Claude</button>
+                <button class="pill" data-owner-value="Cursor" data-tip="Lập trình" title="Lập trình">Cursor</button>
+                <button class="pill" data-owner-value="AIW" data-tip="Cập nhật dữ liệu" title="Cập nhật dữ liệu">AIW</button>
+              </div>
+            </div>
+
+            <p class="microcopy" style="margin-top: 12px;">UI song ngữ; giá trị được ghi vào hệ thống vẫn giữ enum tiếng Anh để không phá logic PCC.</p>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <section class="advanced-wrap">
+      <button class="advanced-toggle" onclick="toggleAdvanced()" type="button" data-tip="Trường nâng cao" title="Trường nâng cao">
+        <div class="advanced-toggle-left">
+          <div class="advanced-icon" id="advancedIcon">＋</div>
+          <div class="advanced-title">
+            <strong>Nâng cao / Advanced Fields</strong>
+            <span>Chỉ mở khi cần Target Sheet, Target ID, Related IDs hoặc Risk.</span>
+          </div>
+        </div>
+        <div class="advanced-state" id="advancedState">Mở rộng / Expand</div>
+      </button>
+
+      <div id="advanced" class="advanced">
+        <div class="advanced-grid">
+          <div class="field">
+            <label for="targetSheetProposed">Sheet đề xuất / Target Proposed</label>
+            <select id="targetSheetProposed">
+              <option value="__AIA_CLASSIFY__">Để AIA_01 phân loại / AIA classifies</option>
+              <option value="01_TASK">01_TASK</option>
+              <option value="02_DOCUMENT">02_DOCUMENT</option>
+              <option value="04_NOTEBOOKLM">04_NOTEBOOKLM</option>
+              <option value="05_RISK">05_RISK</option>
+              <option value="06_IDEA">06_IDEA</option>
+              <option value="03_DECISION_LOG">03_DECISION_LOG</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="targetSheetApproved">Sheet đã duyệt / Target Approved</label>
+            <select id="targetSheetApproved">
+              <option value="__BLANK__">Để trống / Blank</option>
+              <option value="01_TASK">01_TASK</option>
+              <option value="02_DOCUMENT">02_DOCUMENT</option>
+              <option value="04_NOTEBOOKLM">04_NOTEBOOKLM</option>
+              <option value="05_RISK">05_RISK</option>
+              <option value="06_IDEA">06_IDEA</option>
+              <option value="03_DECISION_LOG">03_DECISION_LOG</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="targetIdProposed">Mã đề xuất / Target ID</label>
+            <input id="targetIdProposed" placeholder="T_0030 / MF_... / R_...">
+          </div>
+
+          <div class="field">
+            <label for="targetObjectTitle">Tên đối tượng / Object Title</label>
+            <input id="targetObjectTitle">
+          </div>
+
+          <div class="field">
+            <label for="existingTargetId">Mã cũ / Existing Target ID</label>
+            <input id="existingTargetId">
+          </div>
+
+          <div class="field">
+            <label for="relatedDocumentId">Related Document ID</label>
+            <input id="relatedDocumentId">
+          </div>
+
+          <div class="field">
+            <label for="relatedTaskId">Related Task ID</label>
+            <input id="relatedTaskId">
+          </div>
+
+          <div class="field">
+            <label for="relatedDecisionId">Related Decision ID</label>
+            <input id="relatedDecisionId">
+          </div>
+
+          <div class="field">
+            <label for="riskLevel">Risk Level</label>
+            <select id="riskLevel">
+              <option value="__BLANK__">Để trống / Blank</option>
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+              <option value="Critical">Critical</option>
+            </select>
+          </div>
+
+          <div class="field" style="grid-column: span 3;">
+            <label for="riskAction">Hành động rủi ro / Risk Action</label>
+            <textarea id="riskAction" placeholder="Nếu là RISK, ghi hành động kiểm soát / If RISK, write mitigation action."></textarea>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const state = {
+      inputType: 'TASK',
+      requestedAction: 'CREATE_NEW',
+      priority: 'Medium',
+      sourceType: 'MANUAL_INPUT'
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+      setDefaultDueDate(1);
+    });
+
+    function setDefaultDueDate(daysFromToday) {
+      const dueDate = document.getElementById('dueDate');
+      if (!dueDate || dueDate.value) return;
+
+      const date = new Date();
+      date.setDate(date.getDate() + daysFromToday);
+      const yyyy = date.getFullYear();
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const dd = String(date.getDate()).padStart(2, '0');
+      dueDate.value = yyyy + '-' + mm + '-' + dd;
+    }
+
+    function showToast(type, message) {
+      const toast = document.getElementById('toast');
+      if (!toast) return;
+
+      toast.className = 'toast ' + type + ' show';
+      toast.textContent = message;
+
+      clearTimeout(window.__pccToastTimer);
+      window.__pccToastTimer = setTimeout(function() {
+        toast.classList.remove('show');
+      }, 3600);
+    }
+
+    function setRawInputError(hasError) {
+      const rawInput = document.getElementById('rawInput');
+      const field = rawInput ? rawInput.closest('.field') : null;
+      if (!field) return;
+      field.classList.toggle('has-error', !!hasError);
+    }
+
+    function setField(field, value) {
+      if (!value) return;
+      state[field] = value;
+
+      const valueEl = document.getElementById(field + 'Value');
+      if (valueEl) valueEl.textContent = value;
+
+      const group = document.querySelector('.pills[data-field="' + field + '"]');
+      if (!group) return;
+
+      group.querySelectorAll('.pill[data-value]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.value === value);
+      });
+    }
+
+    document.querySelectorAll('.pills[data-field]').forEach(group => {
+      group.addEventListener('click', function(e) {
+        const btn = e.target.closest('.pill');
+        if (!btn) return;
+        e.preventDefault();
+
+        const moreId = btn.dataset.more;
+        if (moreId) {
+          const row = document.getElementById(moreId);
+          row.classList.toggle('open');
+          return;
+        }
+
+        setField(group.dataset.field, btn.dataset.value);
+      });
+    });
+
+    document.querySelectorAll('[data-owner]').forEach(group => {
+      group.addEventListener('click', function(e) {
+        const btn = e.target.closest('.pill');
+        if (!btn) return;
+        e.preventDefault();
+
+        const owner = btn.dataset.ownerValue;
+        document.getElementById('owner').value = owner;
+
+        group.querySelectorAll('.pill').forEach(item => {
+          item.classList.toggle('active', item === btn);
+        });
+      });
+    });
+
+    function toggleAdvanced() {
+      const box = document.getElementById('advanced');
+      const badge = document.getElementById('advancedState');
+      const icon = document.getElementById('advancedIcon');
+      const isOpen = box.classList.toggle('open');
+      badge.textContent = isOpen ? 'Thu gọn / Collapse' : 'Mở rộng / Expand';
+      if (icon) icon.textContent = isOpen ? '−' : '＋';
+    }
+
+    function collectPayload() {
+      return {
+        rawInput: document.getElementById('rawInput').value,
+        inputBy: document.getElementById('inputBy').value,
+        remark: document.getElementById('remark').value,
+        inputType: state.inputType,
+        requestedAction: state.requestedAction,
+        priority: state.priority,
+        sourceType: state.sourceType,
+        owner: document.getElementById('owner').value,
+        dueDate: document.getElementById('dueDate').value,
+        sourceLink: document.getElementById('sourceLink').value,
+        targetSheetProposed: document.getElementById('targetSheetProposed').value,
+        targetSheetApproved: document.getElementById('targetSheetApproved').value,
+        targetIdProposed: document.getElementById('targetIdProposed').value,
+        targetObjectTitle: document.getElementById('targetObjectTitle').value,
+        existingTargetId: document.getElementById('existingTargetId').value,
+        relatedDocumentId: document.getElementById('relatedDocumentId').value,
+        relatedTaskId: document.getElementById('relatedTaskId').value,
+        relatedDecisionId: document.getElementById('relatedDecisionId').value,
+        riskLevel: document.getElementById('riskLevel').value,
+        riskAction: document.getElementById('riskAction').value
+      };
+    }
+
+    function setStatus(type, message) {
+      const box = document.getElementById('statusBox');
+      box.className = type ? 'status ' + type : 'status';
+      box.textContent = message || '';
+    }
+
+    function resetAfterSubmit() {
+      document.getElementById('rawInput').value = '';
+      document.getElementById('remark').value = '';
+      document.getElementById('sourceLink').value = '';
+      document.getElementById('targetIdProposed').value = '';
+      document.getElementById('targetObjectTitle').value = '';
+      document.getElementById('existingTargetId').value = '';
+      document.getElementById('relatedDocumentId').value = '';
+      document.getElementById('relatedTaskId').value = '';
+      document.getElementById('relatedDecisionId').value = '';
+      document.getElementById('riskAction').value = '';
+    }
+
+    const rawInputEl = document.getElementById('rawInput');
+    if (rawInputEl) {
+      rawInputEl.addEventListener('input', function() {
+        if (rawInputEl.value.trim()) setRawInputError(false);
+      });
+    }
+
+    function validateRawInput() {
+      const payload = collectPayload();
+
+      if (!payload.rawInput || payload.rawInput.trim() === '') {
+        setRawInputError(true);
+        setStatus('err', 'Chưa nhập Nội dung mới / Missing Raw Input.');
+        showToast('err', 'Chưa nhập Nội dung mới / Missing Raw Input.');
+        document.getElementById('rawInput').focus();
+        return null;
+      }
+
+      setRawInputError(false);
+      return payload;
+    }
+
+    const quickActionLabels = {
+      GATEWAY: 'GATEWAY',
+      TASK: 'TASK',
+      DOC: 'DOC',
+      RISK: 'RISK',
+      IDEA: 'IDEA',
+      DECISION: 'DECISION',
+      KB: 'KB'
+    };
+
+    const quickActionButtons = {
+      GATEWAY: 'btnGateway',
+      TASK: 'btnTask',
+      DOC: 'btnDoc',
+      RISK: 'btnRisk',
+      IDEA: 'btnIdea',
+      DECISION: 'btnDecision',
+      KB: 'btnKb'
+    };
+
+    function setActionLoading(kind) {
+      Object.keys(quickActionButtons).forEach(key => {
+        const btn = document.getElementById(quickActionButtons[key]);
+        if (!btn) return;
+        btn.disabled = true;
+        btn.classList.remove('is-loading');
+        btn.textContent = quickActionLabels[key];
+      });
+
+      const activeBtn = document.getElementById(quickActionButtons[kind]);
+      if (activeBtn) {
+        activeBtn.classList.add('is-loading');
+        activeBtn.textContent = 'WAIT';
+      }
+    }
+
+    function restoreActionButtons() {
+      Object.keys(quickActionButtons).forEach(key => {
+        const btn = document.getElementById(quickActionButtons[key]);
+        if (!btn) return;
+        btn.disabled = false;
+        btn.classList.remove('is-loading');
+        btn.textContent = quickActionLabels[key];
+      });
+    }
+
+    function submitForm() {
+      submitQuick('GATEWAY');
+    }
+
+    function submitAndCreateTask() {
+      submitQuick('TASK');
+    }
+
+    function submitQuick(kind) {
+      const actionKind = String(kind || 'GATEWAY').toUpperCase();
+      const payload = validateRawInput();
+      if (!payload) return;
+
+      const actionMap = {
+        GATEWAY: { inputType: state.inputType, action: state.requestedAction, toast: 'Đang gửi Gateway...' },
+        TASK: { inputType: 'TASK', action: 'CREATE_NEW', toast: 'Đang tạo Task...' },
+        DOC: { inputType: 'DOCUMENT', action: 'REGISTER_SOURCE', toast: 'Đang đăng ký Document...' },
+        RISK: { inputType: 'RISK', action: 'CREATE_NEW', toast: 'Đang ghi Risk...' },
+        IDEA: { inputType: 'IDEA', action: 'CREATE_NEW', toast: 'Đang ghi Idea...' },
+        DECISION: { inputType: 'DECISION', action: 'MANUAL_DECISION_LOG', toast: 'Đang đưa vào Decision queue...' },
+        KB: { inputType: 'NOTEBOOKLM', action: 'REGISTER_SOURCE', toast: 'Đang đưa vào KB queue...' }
+      };
+
+      const config = actionMap[actionKind] || actionMap.GATEWAY;
+      payload.inputType = config.inputType;
+      payload.requestedAction = config.action;
+
+      setField('inputType', config.inputType);
+      setField('requestedAction', config.action);
+
+      setActionLoading(actionKind);
+      setStatus('', '');
+      showToast('ok', config.toast);
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          const idLine = res.taskId
+            ? 'Task ID: ' + res.taskId
+            : (res.targetId ? 'Target ID: ' + res.targetId : 'Gateway Only');
+
+          setStatus(
+            'ok',
+            'Đã xử lý / Done\n' +
+            'Action: ' + actionKind + '\n' +
+            'Gateway ID: ' + res.gatewayId + '\n' +
+            idLine + '\n' +
+            'Review Status: ' + res.reviewStatus + '\n' +
+            'Validation Result: ' + res.validationResult
+          );
+
+          showToast('ok', actionKind + ' done.');
+          resetAfterSubmit();
+          setDefaultDueDate(1);
+          restoreActionButtons();
+        })
+        .withFailureHandler(function(err) {
+          const message = err && err.message ? err.message : err;
+          setStatus('err', 'Lỗi / Error:\n' + message);
+          showToast('err', 'Lỗi: ' + message);
+          restoreActionButtons();
+        })
+        .pccV043_submitQuick(payload, actionKind);
+    }
+  </script>
+</body>
+</html>
